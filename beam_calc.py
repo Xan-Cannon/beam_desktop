@@ -11,6 +11,8 @@ A configuration ("cfg") is a dict:
     CD           load duration factor (lumber)
     repetitive   True to apply C_r = 1.15 (2x and 4x lumber only)
     self_weight  True to add the member weight as a dead uniform load
+    live_limit   live-load deflection limit denominator n in L/n (default 360)
+    total_limit  total-load deflection limit denominator n in L/n (default 240)
     factor       what-if multiplier on the entered loads (default 1)
     loads        list of load dicts:
                    {"type": "point", "P": kips, "x": ft, "tag": "D" or "L"}
@@ -23,6 +25,7 @@ from __future__ import annotations
 
 import bisect
 import copy
+import json
 import math
 from dataclasses import dataclass, field
 
@@ -30,6 +33,8 @@ from sections import LUMBER, STEEL, W_SHAPES, WOOD_DENSITY_PCF
 
 N_STEPS = 2000
 VALID_TOL = 0.005  # validation cases must match within 0.5 %
+DEFAULT_LIVE_LIMIT = 360.0
+DEFAULT_TOTAL_LIMIT = 240.0
 
 
 def is_num(v) -> bool:
@@ -40,7 +45,8 @@ def default_cfg() -> dict:
     """The W12x26 validation beam (case 1), which the app opens with."""
     return {
         "support": "ss", "L": 20.0, "material": "steel", "section": "W12x26",
-        "CD": 1.0, "repetitive": False, "self_weight": False, "factor": 1.0,
+        "CD": 1.0, "repetitive": False, "self_weight": False,
+        "live_limit": DEFAULT_LIVE_LIMIT, "total_limit": DEFAULT_TOTAL_LIMIT, "factor": 1.0,
         "loads": [{"type": "udl", "w": 1.0, "x1": 0.0, "x2": 20.0, "tag": "L"}],
     }
 
@@ -127,7 +133,8 @@ def load_name(loads: list, i: int) -> str:
 def validate_cfg(cfg: dict) -> list[dict]:
     """Input checks. Returns [{"msg": str, "field": str}].
 
-    field is "L", "CD", "section", or "load-<i>" for a row in the load list.
+    field is "L", "CD", "live_limit", "total_limit", "section", or "load-<i>"
+    for a row in the load list.
     """
     errs = []
     L = cfg.get("L")
@@ -138,6 +145,10 @@ def validate_cfg(cfg: dict) -> list[dict]:
     L_ok = is_num(L) and L > 0
     if cfg["material"] == "lumber" and (not is_num(cfg.get("CD")) or cfg["CD"] <= 0):
         errs.append({"msg": "C_D must be a number greater than 0.", "field": "CD"})
+    for key, name in (("live_limit", "Live-load"), ("total_limit", "Total-load")):
+        v = cfg.get(key, DEFAULT_LIVE_LIMIT if key == "live_limit" else DEFAULT_TOTAL_LIMIT)
+        if not is_num(v) or v <= 0:
+            errs.append({"msg": f"{name} deflection limit must be a number greater than 0.", "field": key})
     loads = cfg["loads"]
     for i, ld in enumerate(loads):
         name, fld = load_name(loads, i), f"load-{i}"
@@ -423,12 +434,14 @@ def design(cfg: dict) -> Result:
 
     Leff = cfg["L"] if cfg["support"] == "ss" else 2 * cfg["L"]
     Lname = "L" if cfg["support"] == "ss" else "2L"
+    n_live = cfg.get("live_limit", DEFAULT_LIVE_LIMIT)
+    n_total = cfg.get("total_limit", DEFAULT_TOTAL_LIMIT)
     m = member
     checks = {
         "bending": Check(m.bend_label, m.bending_demand(total.Mabs), m.bend_cap, m.bend_unit, m.bend_dec, m.bend_cap_label),
         "shear": Check(m.shear_label, m.shear_demand(total.Vabs), m.shear_cap, m.shear_unit, m.shear_dec, m.shear_cap_label),
-        "live": Check("Live-load deflection", abs(live.dMax), Leff * 12 / 360, "in", 3, f"{Lname}/360"),
-        "total": Check("Total-load deflection", abs(total.dMax), Leff * 12 / 240, "in", 3, f"{Lname}/240"),
+        "live": Check("Live-load deflection", abs(live.dMax), Leff * 12 / n_live, "in", 3, f"{Lname}/{n_live:g}"),
+        "total": Check("Total-load deflection", abs(total.dMax), Leff * 12 / n_total, "in", 3, f"{Lname}/{n_total:g}"),
     }
     return Result(errors=[], member=member, loads=loads, total=total, live=live, dead=dead, checks=checks, Leff=Leff)
 
@@ -598,6 +611,123 @@ def run_validation() -> list[dict]:
     return out
 
 
+# ---------------------------------------------------------------- design files (.beam)
+
+FILE_APP = "Beam Designer"
+FILE_VERSION = 1
+
+
+def design_to_dict(cfg: dict) -> dict:
+    """The saved form of a design. Raises ValueError if a value is not a number."""
+    for key, label in (("L", "Span"), ("CD", "C_D"), ("live_limit", "Live-load deflection limit"),
+                       ("total_limit", "Total-load deflection limit")):
+        if not is_num(cfg.get(key)):
+            raise ValueError(f"{label} must be a number before the design can be saved.")
+    loads = []
+    for ld in cfg["loads"]:
+        if ld["type"] == "point":
+            loads.append({"type": "point", "P_kips": ld["P"], "x_ft": ld["x"], "tag": ld["tag"]})
+        else:
+            loads.append({"type": "udl", "w_kip_per_ft": ld["w"], "start_ft": ld["x1"], "end_ft": ld["x2"],
+                          "tag": ld["tag"]})
+    return {
+        "app": FILE_APP,
+        "version": FILE_VERSION,
+        "support": cfg["support"],
+        "span_ft": cfg["L"],
+        "material": cfg["material"],
+        "section": cfg["section"],
+        "CD": cfg["CD"],
+        "repetitive": bool(cfg["repetitive"]),
+        "self_weight": bool(cfg["self_weight"]),
+        "deflection_limits": {"live": cfg["live_limit"], "total": cfg["total_limit"]},
+        "loads": loads,
+    }
+
+
+def design_from_dict(d) -> dict:
+    """Build a cfg from saved data. Raises ValueError with a readable message if the data is bad."""
+    if not isinstance(d, dict) or d.get("app") != FILE_APP:
+        raise ValueError("This is not a Beam Designer file.")
+    ver = d.get("version")
+    if not isinstance(ver, int) or ver < 1:
+        raise ValueError("The file has no valid format version.")
+    if ver > FILE_VERSION:
+        raise ValueError(f"The file was made by a newer version of the app (format {ver}).")
+
+    def num(obj, key, where):
+        v = obj.get(key) if isinstance(obj, dict) else None
+        if not is_num(v):
+            raise ValueError(f"{where}: '{key}' is missing or not a number.")
+        return float(v)
+
+    def flag(key):
+        v = d.get(key, False)
+        if not isinstance(v, bool):
+            raise ValueError(f"'{key}' must be true or false.")
+        return v
+
+    support = d.get("support")
+    if support not in ("ss", "cant"):
+        raise ValueError("'support' must be \"ss\" (simply supported) or \"cant\" (cantilever).")
+    material = d.get("material")
+    if material not in ("steel", "lumber"):
+        raise ValueError("'material' must be \"steel\" or \"lumber\".")
+    names = [r["name"] for r in (W_SHAPES if material == "steel" else LUMBER)]
+    section = d.get("section")
+    if section not in names:
+        raise ValueError(f"Section '{section}' is not in the {material} list.")
+    limits = d.get("deflection_limits", {"live": DEFAULT_LIVE_LIMIT, "total": DEFAULT_TOTAL_LIMIT})
+    raw_loads = d.get("loads")
+    if not isinstance(raw_loads, list):
+        raise ValueError("'loads' must be a list.")
+    loads = []
+    for i, ld in enumerate(raw_loads, start=1):
+        where = f"Load {i}"
+        if not isinstance(ld, dict) or ld.get("type") not in ("point", "udl"):
+            raise ValueError(f"{where}: 'type' must be \"point\" or \"udl\".")
+        tag = ld.get("tag")
+        if tag not in ("D", "L"):
+            raise ValueError(f"{where}: 'tag' must be \"D\" (dead) or \"L\" (live).")
+        if ld["type"] == "point":
+            loads.append({"type": "point", "P": num(ld, "P_kips", where), "x": num(ld, "x_ft", where), "tag": tag})
+        else:
+            loads.append({"type": "udl", "w": num(ld, "w_kip_per_ft", where), "x1": num(ld, "start_ft", where),
+                          "x2": num(ld, "end_ft", where), "tag": tag})
+    return {
+        "support": support,
+        "L": num(d, "span_ft", "File"),
+        "material": material,
+        "section": section,
+        "CD": num(d, "CD", "File") if "CD" in d else 1.0,
+        "repetitive": flag("repetitive"),
+        "self_weight": flag("self_weight"),
+        "live_limit": num(limits, "live", "Deflection limits"),
+        "total_limit": num(limits, "total", "Deflection limits"),
+        "factor": 1.0,
+        "loads": loads,
+    }
+
+
+def save_design(cfg: dict, path: str) -> None:
+    data = design_to_dict(cfg)
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, indent=2)
+        fh.write("\n")
+
+
+def open_design(path: str) -> dict:
+    """Read a .beam file. Raises ValueError with a readable message on any problem."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = json.load(fh)
+    except OSError as e:
+        raise ValueError(f"The file could not be read: {e.strerror or e}.") from e
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
+        raise ValueError("The file is not valid JSON, so it is not a Beam Designer file.") from e
+    return design_from_dict(data)
+
+
 # ---------------------------------------------------------------- report
 
 def fx(v: float, d: int) -> str:
@@ -619,6 +749,7 @@ def report_text(cfg: dict, res: Result) -> str:
         lines.append(f"  Member:       {m.name}, Douglas Fir-Larch No. 2")
         lines.append(f"  C_D:          {cfg['CD']:g}    Repetitive (C_r): {'yes' if cfg['repetitive'] else 'no'}")
     lines.append(f"  Self-weight:  {'included, ' + fx(m.w_self * 1000, 1) + ' lb/ft' if cfg['self_weight'] else 'not included'}")
+    lines.append(f"  Deflection limits: live {c['live'].cap_label}, total {c['total'].cap_label}")
     if cfg.get("factor", 1) != 1:
         lines.append(f"  What-if:      entered loads × {fx(cfg['factor'], 2)}")
     lines.append("  Loads (as entered):")

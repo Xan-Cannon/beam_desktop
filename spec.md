@@ -28,8 +28,9 @@ described below.
   window.
 - `sections.py`: the W-shape and lumber tables below, with source citations in
   comments.
-- `test_validation.py`: `unittest` tests for the six validation cases. Run them
-  with `python -m unittest`.
+- `test_validation.py`: `unittest` tests for the six validation cases and the
+  design-file format. Run them with `python -m unittest`.
+- `*.beam`: saved designs (see Saving and opening designs).
 - `index.html`: the web reference app. Do not change it.
 
 ## Assumptions
@@ -50,6 +51,7 @@ All inputs sit in a panel on the left side of the window.
 - **Point loads:** a table (`ttk.Treeview`) with columns P (kips), x (ft), and Dead/Live. Add, Edit, and Remove buttons sit under it. Add and Edit open a small dialog with fields for each value.
 - **Uniform loads:** a second table with columns w (kip/ft), start (ft), end (ft), and Dead/Live, with the same buttons. Partial-length uniform loads are allowed.
 - **Self-weight checkbox:** adds the member's own weight as a dead uniform load over the full span. It is off by default.
+- **Deflection limits:** two entries for the limit denominators, shown as "L / [360]" for live load and "L / [240]" for total load. The prefix reads "2L /" for a cantilever. Defaults are 360 and 240, and each must be a number greater than 0.
 - **Material and section:**
   - Material: radio buttons for Steel or Lumber.
   - Section: a read-only combobox listing the sections for the chosen material.
@@ -109,9 +111,9 @@ All calculations live in `beam_calc.py`.
 6. **Shear check:**
    - Steel: Va = 0.6 · Fy · d · tw / 1.50, with Cv = 1.0. This holds for all listed shapes.
    - Lumber: fv = 1.5 V_max / A must not exceed Fv′ = Fv · C_D.
-7. **Deflection check:** compare against these limits.
-   - Live-load deflection ≤ L/360.
-   - Total-load deflection ≤ L/240.
+7. **Deflection check:** compare against the limits set in the inputs.
+   - Live-load deflection ≤ L/n_live (default L/360).
+   - Total-load deflection ≤ L/n_total (default L/240).
    - For a cantilever, use 2L in place of L.
 
 ## Window layout
@@ -119,7 +121,7 @@ All calculations live in `beam_calc.py`.
 - **Center:** four plots stacked on one `Canvas` (or four canvases with the same width and margins): the beam sketch, then shear, moment, and deflection.
 - **Right:** a `ttk.Notebook` with tabs for Summary, Stresses at Probe, Section Comparison, and Validation.
 - **Bottom:** a status bar for input messages and the overall PASS/FAIL result.
-- **Menu bar:** File (Save Report, Save Diagrams, Quit) and Help (About).
+- **Menu bar:** File (Open, Save, Save As, Save Report, Save Diagrams, Quit) and Help (About).
 - The window opens at 1280 × 800, can be resized down to 1000 × 680, and the plots redraw to fit when it is resized.
 
 ## Outputs
@@ -136,6 +138,25 @@ All calculations live in `beam_calc.py`.
 - **Save Report:** writes a plain-text report (`.txt`) with the inputs, section properties, reactions, maximum values with locations, and the summary table, for turning in work. Use a save-file dialog.
 - **Save Diagrams:** saves the plot canvas as an Encapsulated PostScript file (`.eps`) with `Canvas.postscript()`.
 
+## Saving and opening designs
+- **File format:** a design is saved as a `.beam` file, which is plain JSON. It holds the
+  support type, span, material, section, C_D, repetitive-member setting, self-weight
+  setting, deflection limits, and the list of loads (type, magnitude, position, Dead/Live).
+  It also stores the app name and a format version number. The what-if multiplier is
+  not saved; an opened design starts at 1×.
+- **File menu:** Open (Ctrl+O, Cmd+O on macOS) reads a `.beam` file and loads it into
+  the inputs. Save (Ctrl/Cmd+S) writes to the current file, or asks for a name if the
+  design has not been saved yet. Save As (Ctrl/Cmd+Shift+S) always asks for a name.
+- **Window title:** shows the file name ("Untitled" before the first save), with a `*`
+  when there are unsaved changes.
+- **Unsaved changes:** before Open, Reset to example beam, loading a validation case, or
+  Quit throws away unsaved changes, ask whether to save them (Save, Don't Save, Cancel).
+- **Bad files:** if a file cannot be read or is missing required values, show a clear
+  message saying what is wrong and keep the current design. A file whose loads fall
+  outside the span still opens, and the input checks mark those loads in red.
+- Saving is blocked, with a message, while the span, C_D, or a deflection limit is not a
+  number.
+
 ## Interactive tools
 - **Probe:** moving the mouse over the sketch or any diagram moves a vertical probe line that stays lined up across all plots (they share the same x-axis margins). The Left and Right arrow keys also move it when a plot has focus. Each plot shows its value at the probe (Δ on the sketch, V, M, and Δ total/live on the diagrams). Clicking pins the probe, and clicking again unpins it. The probe snaps to load positions and max-value locations. By default it sits at the max-moment location.
 - **Stresses at the probe:** the cross-section (lumber to scale, steel schematic), the linear bending-stress distribution with ±Fb (or ±Fb′) allowable lines, and the shear stress: average web shear V/(d·tw) for steel, parabolic with peak 1.5V/A for lumber. A readout lists x, V, M, fb/Fb, fv/Fv, and live and total Δ.
@@ -147,7 +168,7 @@ All calculations live in `beam_calc.py`.
 Clean and professional, using the native `ttk` theme for the platform. Readable on a laptop screen. Opens with the W12x26 validation beam (case 1) already loaded.
 
 ## Validation
-All cases must match within 0.5%. Self-weight is off unless stated otherwise. Check every case in `test_validation.py`. The Validation tab runs the same cases from inside the app and shows each case's expected value, computed value, difference, and PASS/FAIL. Results must also match `index.html` for the same inputs.
+All cases must match within 0.5%. Self-weight is off and the deflection limits are the defaults (L/360 and L/240) unless stated otherwise. Check every case in `test_validation.py`. The Validation tab runs the same cases from inside the app and shows each case's expected value, computed value, difference, and PASS/FAIL. Results must also match `index.html` for the same inputs.
 
 1. **20 ft simply supported W12x26, 1 kip/ft live load over the full span**
    - Reactions: R = 10.0 kips; V_max = 10.0 kips; M = 50.0 kip-ft
@@ -173,4 +194,4 @@ All cases must match within 0.5%. Self-weight is off unless stated otherwise. Ch
    - Total-load deflection: 0.625 in (≤ L/240 = 1.00 in)
 
 ## Out of scope
-Continuous and multi-span beams, lateral-torsional buckling and other buckling, weak-axis bending, axial loads, load combinations beyond D + L, and sections not in the lists above. Also out of scope for the desktop version: packaging as a standalone executable, saving and opening project files, printing directly from the app, and dark mode.
+Continuous and multi-span beams, lateral-torsional buckling and other buckling, weak-axis bending, axial loads, load combinations beyond D + L, and sections not in the lists above. Also out of scope for the desktop version: packaging as a standalone executable, printing directly from the app, and dark mode.

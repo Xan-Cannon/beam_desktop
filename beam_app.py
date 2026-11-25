@@ -10,7 +10,9 @@ the behavior reference.
 from __future__ import annotations
 
 import copy
+import json
 import math
+import os
 import time
 import tkinter as tk
 import tkinter.font as tkfont
@@ -190,9 +192,11 @@ class BeamApp:
         self.anim_id = None
         self.pending_update = None
         self.pending_redraw = None
-        self.factor_drag_value = 1.0
+        self.file_path = None                # current .beam file
+        self.saved_snapshot = self._snapshot()
 
         root.title("Beam Designer")
+        root.protocol("WM_DELETE_WINDOW", self.quit)
         root.geometry("1280x800")
         root.minsize(1000, 680)
         self._fonts()
@@ -232,17 +236,24 @@ class BeamApp:
         mod = "Command" if self.root.tk.call("tk", "windowingsystem") == "aqua" else "Control"
         accel = "Cmd" if mod == "Command" else "Ctrl"
         fm = tk.Menu(mb, tearoff=False)
-        fm.add_command(label="Save Report…", accelerator=f"{accel}+S", command=self.save_report)
+        fm.add_command(label="Open…", accelerator=f"{accel}+O", command=self.open_file)
+        fm.add_command(label="Save", accelerator=f"{accel}+S", command=self.save_file)
+        fm.add_command(label="Save As…", accelerator=f"{accel}+Shift+S", command=self.save_file_as)
+        fm.add_separator()
+        fm.add_command(label="Save Report…", command=self.save_report)
         fm.add_command(label="Save Diagrams…", command=self.save_diagrams)
         fm.add_separator()
-        fm.add_command(label="Quit", accelerator=f"{accel}+Q", command=self.root.destroy)
+        fm.add_command(label="Quit", accelerator=f"{accel}+Q", command=self.quit)
         mb.add_cascade(label="File", menu=fm)
         hm = tk.Menu(mb, tearoff=False)
         hm.add_command(label="About", command=self.about)
         mb.add_cascade(label="Help", menu=hm)
         self.root.config(menu=mb)
-        self.root.bind_all(f"<{mod}-s>", lambda e: self.save_report())
-        self.root.bind_all(f"<{mod}-q>", lambda e: self.root.destroy())
+        self.root.bind_all(f"<{mod}-o>", lambda e: self.open_file())
+        self.root.bind_all(f"<{mod}-s>", lambda e: self.save_file())
+        self.root.bind_all(f"<{mod}-S>", lambda e: self.save_file_as())
+        self.root.bind_all(f"<{mod}-Shift-s>", lambda e: self.save_file_as())
+        self.root.bind_all(f"<{mod}-q>", lambda e: self.quit())
 
     def _layout(self):
         self.root.columnconfigure(0, weight=1)
@@ -361,6 +372,26 @@ class BeamApp:
         self.var_self = tk.BooleanVar()
         ttk.Checkbutton(f, text="Include self-weight (dead)", variable=self.var_self,
                         command=self.on_simple_change).grid(row=r, column=0, columnspan=2, sticky="w", pady=(6, 0)); r += 1
+
+        # Deflection limits
+        head("Deflection limits")
+        df = ttk.Frame(f)
+        df.grid(row=r, column=0, columnspan=2, sticky="w"); r += 1
+        self.var_live_lim = tk.StringVar()
+        self.var_total_lim = tk.StringVar()
+        self.lim_prefix = []
+        for row, (label, var) in enumerate((("Live load", self.var_live_lim), ("Total load", self.var_total_lim))):
+            ttk.Label(df, text=label).grid(row=row, column=0, sticky="w", pady=2)
+            pre = ttk.Label(df, text="L /", width=4, anchor="e")
+            pre.grid(row=row, column=1, sticky="e", padx=(8, 2))
+            self.lim_prefix.append(pre)
+            box, _ent = self._outlined_entry(df, var, 6)
+            box.grid(row=row, column=2, sticky="w")
+            var.trace_add("write", lambda *a: self.schedule_update())
+            if row == 0:
+                self.box_live_lim = box
+            else:
+                self.box_total_lim = box
 
         # Loads
         head("Point loads")
@@ -643,6 +674,8 @@ class BeamApp:
         self.var_CD.set(fmt_num(c["CD"]))
         self.var_rep.set(c["repetitive"])
         self.var_self.set(c["self_weight"])
+        self.var_live_lim.set(fmt_num(c.get("live_limit", bc.DEFAULT_LIVE_LIMIT)))
+        self.var_total_lim.set(fmt_num(c.get("total_limit", bc.DEFAULT_TOTAL_LIMIT)))
         self.var_factor.set(c.get("factor", 1.0))
         self.fill_sections()
         self.render_load_tables()
@@ -663,6 +696,8 @@ class BeamApp:
         """Copy the typed fields into self.cfg."""
         self.cfg["L"] = parse_float(self.var_L.get())
         self.cfg["CD"] = parse_float(self.var_CD.get())
+        self.cfg["live_limit"] = parse_float(self.var_live_lim.get())
+        self.cfg["total_limit"] = parse_float(self.var_total_lim.get())
 
     def schedule_update(self):
         if getattr(self, "_syncing", False):
@@ -712,10 +747,107 @@ class BeamApp:
         self.redraw()
 
     def reset(self):
-        self.cfg = bc.default_cfg()
+        if not self.maybe_save():
+            return
+        self.load_cfg(bc.default_cfg(), None)
+
+    def load_cfg(self, cfg, path):
+        """Replace the whole design (after Open, Reset, or loading a validation case)."""
+        self.cfg = cfg
+        self.cfg.setdefault("factor", 1.0)
+        self.cfg.setdefault("live_limit", bc.DEFAULT_LIVE_LIMIT)
+        self.cfg.setdefault("total_limit", bc.DEFAULT_TOTAL_LIMIT)
+        self.file_path = path
         self.pin_x = None
         self.sync_inputs()
+        if self.pending_update:
+            self.root.after_cancel(self.pending_update)
         self.update()
+        self.saved_snapshot = self._snapshot()
+        self.update_title()
+
+    # ------------------------------------------------------------ design files
+    def _snapshot(self):
+        """Everything that gets saved, for spotting unsaved changes."""
+        c = dict(self.cfg)
+        c.pop("factor", None)
+        return json.dumps(c, sort_keys=True, default=str)
+
+    def is_dirty(self):
+        return self._snapshot() != self.saved_snapshot
+
+    def update_title(self):
+        name = os.path.basename(self.file_path) if self.file_path else "Untitled"
+        self.root.title(f"{'*' if self.is_dirty() else ''}{name} — Beam Designer")
+
+    def maybe_save(self):
+        """Ask to save unsaved changes. Returns False if the user cancels."""
+        if self.pending_update:
+            self.root.after_cancel(self.pending_update)
+            self.update()
+        if not self.is_dirty():
+            return True
+        name = os.path.basename(self.file_path) if self.file_path else "this design"
+        ans = messagebox.askyesnocancel("Unsaved changes", f"Save changes to {name} first?", parent=self.root,
+                                        icon="warning")
+        if ans is None:
+            return False
+        if ans:
+            return self.save_file()
+        return True
+
+    def open_file(self):
+        if not self.maybe_save():
+            return
+        path = filedialog.askopenfilename(parent=self.root, title="Open Design",
+                                          filetypes=[("Beam designs", "*.beam"), ("JSON files", "*.json"),
+                                                     ("All files", "*.*")])
+        if not path:
+            return
+        try:
+            cfg = bc.open_design(path)
+        except ValueError as e:
+            messagebox.showerror("Open Design", f"Could not open {os.path.basename(path)}.\n\n{e}", parent=self.root)
+            return
+        self.load_cfg(cfg, path)
+        self.status_msg.config(text=f"Opened {path}", foreground="")
+
+    def save_file(self):
+        """Save to the current file, or ask for a name. Returns True if saved."""
+        if self.file_path is None:
+            return self.save_file_as()
+        return self._write_design(self.file_path)
+
+    def save_file_as(self):
+        start = os.path.basename(self.file_path) if self.file_path else "beam.beam"
+        path = filedialog.asksaveasfilename(parent=self.root, title="Save Design As", defaultextension=".beam",
+                                            initialfile=start,
+                                            filetypes=[("Beam designs", "*.beam"), ("All files", "*.*")])
+        if not path:
+            return False
+        return self._write_design(path)
+
+    def _write_design(self, path):
+        if self.pending_update:
+            self.root.after_cancel(self.pending_update)
+            self.update()
+        try:
+            bc.save_design(self.cfg, path)
+        except ValueError as e:
+            messagebox.showwarning("Save Design", str(e), parent=self.root)
+            return False
+        except OSError as e:
+            messagebox.showerror("Save Design", f"Could not save the file.\n\n{e}", parent=self.root)
+            return False
+        self.file_path = path
+        self.saved_snapshot = self._snapshot()
+        self.update_title()
+        self.status_msg.config(text=f"Saved {path}", foreground="")
+        return True
+
+    def quit(self):
+        if self.maybe_save():
+            self.root.destroy()
 
     # ------------------------------------------------------------ loads
     def span_or(self, v):
@@ -795,6 +927,11 @@ class BeamApp:
         self.render_load_tables()
         self.box_L.configure(bg=PALETTE["fail"] if "L" in self._err_fields else self.frame_bg)
         self.box_CD.configure(bg=PALETTE["fail"] if "CD" in self._err_fields else self.frame_bg)
+        self.box_live_lim.configure(bg=PALETTE["fail"] if "live_limit" in self._err_fields else self.frame_bg)
+        self.box_total_lim.configure(bg=PALETTE["fail"] if "total_limit" in self._err_fields else self.frame_bg)
+        for pre in self.lim_prefix:
+            pre.configure(text="L /" if cfg["support"] == "ss" else "2L /")
+        self.update_title()
         self.support_note.config(text="Pin at x = 0, roller at x = L. Deflection limits use L."
                                  if cfg["support"] == "ss" else
                                  "Fixed at x = 0, free at x = L. Deflection limits use 2L.")
@@ -1734,11 +1871,9 @@ class BeamApp:
         if not iid.startswith("case"):
             iid = self.tv_valid.parent(iid)
         ci = int(iid[4:])
-        self.cfg = copy.deepcopy(bc.VALIDATION[ci]["cfg"])
-        self.cfg.setdefault("factor", 1.0)
-        self.pin_x = None
-        self.sync_inputs()
-        self.update()
+        if not self.maybe_save():
+            return
+        self.load_cfg(copy.deepcopy(bc.VALIDATION[ci]["cfg"]), None)
         self.nb.select(0)
 
     # ------------------------------------------------------------ files

@@ -107,5 +107,91 @@ class InputChecks(unittest.TestCase):
         self.assertTrue(any("end must be greater than start" in e["msg"] for e in errs))
 
 
+class DeflectionLimits(unittest.TestCase):
+    def test_custom_limits_change_capacity(self):
+        cfg = bc.default_cfg()
+        cfg["live_limit"], cfg["total_limit"] = 480.0, 360.0
+        res = bc.design(cfg)
+        self.assertAlmostEqual(res.checks["live"].cap, 20 * 12 / 480)
+        self.assertEqual(res.checks["live"].cap_label, "L/480")
+        self.assertFalse(res.checks["live"].passed)   # 0.609 in > 0.500 in
+
+    def test_cantilever_label_uses_2L(self):
+        cfg = copy.deepcopy(bc.VALIDATION[3]["cfg"])
+        self.assertEqual(bc.design(cfg).checks["total"].cap_label, "2L/240")
+
+    def test_bad_limit_is_an_input_error(self):
+        cfg = bc.default_cfg()
+        cfg["total_limit"] = 0
+        self.assertTrue(any(e["field"] == "total_limit" for e in bc.validate_cfg(cfg)))
+
+
+class DesignFiles(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.TemporaryDirectory()
+        self.path = f"{self.tmp.name}/test.beam"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def sample(self):
+        cfg = bc.default_cfg()
+        cfg.update(support="cant", L=12.5, material="lumber", section="4x10", CD=1.15, repetitive=True,
+                   self_weight=True, live_limit=480.0, total_limit=360.0, factor=2.0)
+        cfg["loads"] = [{"type": "point", "P": 1.5, "x": 12.5, "tag": "L"},
+                        {"type": "udl", "w": 0.05, "x1": 2.0, "x2": 10.0, "tag": "D"}]
+        return cfg
+
+    def test_round_trip(self):
+        cfg = self.sample()
+        bc.save_design(cfg, self.path)
+        back = bc.open_design(self.path)
+        expected = dict(cfg, factor=1.0)   # the what-if multiplier is not saved
+        self.assertEqual(back, expected)
+        self.assertAlmostEqual(bc.design(back).total.Mabs, bc.design(dict(cfg, factor=1.0)).total.Mabs)
+
+    def test_file_is_readable_json(self):
+        import json
+        bc.save_design(self.sample(), self.path)
+        with open(self.path, encoding="utf-8") as fh:
+            data = json.load(fh)
+        self.assertEqual(data["app"], "Beam Designer")
+        self.assertEqual(data["deflection_limits"], {"live": 480.0, "total": 360.0})
+        self.assertEqual(data["loads"][0], {"type": "point", "P_kips": 1.5, "x_ft": 12.5, "tag": "L"})
+
+    def test_cannot_save_non_numeric_span(self):
+        cfg = self.sample()
+        cfg["L"] = math.nan
+        with self.assertRaises(ValueError):
+            bc.save_design(cfg, self.path)
+
+    def test_bad_files_give_clear_errors(self):
+        good = bc.design_to_dict(self.sample())
+        cases = {
+            "not JSON": "{oops",
+            "wrong app": dict(good, app="Other"),
+            "newer version": dict(good, version=99),
+            "bad section": dict(good, section="W99x1"),
+            "bad support": dict(good, support="fixed"),
+            "bad load": dict(good, loads=[{"type": "point", "P_kips": "x", "x_ft": 1, "tag": "L"}]),
+            "bad tag": dict(good, loads=[{"type": "point", "P_kips": 1, "x_ft": 1, "tag": "Q"}]),
+        }
+        import json
+        for name, content in cases.items():
+            with self.subTest(name):
+                with open(self.path, "w", encoding="utf-8") as fh:
+                    fh.write(content if isinstance(content, str) else json.dumps(content))
+                with self.assertRaises(ValueError) as cm:
+                    bc.open_design(self.path)
+                self.assertTrue(str(cm.exception))
+
+    def test_load_outside_span_still_opens(self):
+        d = bc.design_to_dict(self.sample())
+        d["loads"][0]["x_ft"] = 40.0
+        cfg = bc.design_from_dict(d)
+        self.assertTrue(any(e["field"] == "load-0" for e in bc.validate_cfg(cfg)))
+
+
 if __name__ == "__main__":
     unittest.main()
