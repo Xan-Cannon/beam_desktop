@@ -1,0 +1,1536 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Beam Designer</title>
+<style>
+  :root {
+    --bg: #f3f5f8;
+    --panel: #ffffff;
+    --ink: #1b2430;
+    --muted: #5f6c7b;
+    --line: #d8dee6;
+    --soft: #eef2f6;
+    --accent: #1f5fa8;
+    --dead: #44515f;
+    --live: #c95f16;
+    --pass: #1d7a4c;
+    --pass-bg: #e3f3ea;
+    --fail: #b8322a;
+    --fail-bg: #fbe6e4;
+    --shear: #1f5fa8;
+    --moment: #7b3fa0;
+    --defl: #12807f;
+    --beam: #8a96a3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #12161c; --panel: #1b2129; --ink: #e5eaf0; --muted: #9aa7b5; --line: #2f3843; --soft: #232b35;
+      --accent: #6ea8ec; --dead: #b4c0cc; --live: #f0954f; --pass: #5cc98f; --pass-bg: #15301f;
+      --fail: #f07a70; --fail-bg: #3a1a18; --shear: #6ea8ec; --moment: #c48ae6; --defl: #4fc7c5; --beam: #6b7785;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #12161c; --panel: #1b2129; --ink: #e5eaf0; --muted: #9aa7b5; --line: #2f3843; --soft: #232b35;
+    --accent: #6ea8ec; --dead: #b4c0cc; --live: #f0954f; --pass: #5cc98f; --pass-bg: #15301f;
+    --fail: #f07a70; --fail-bg: #3a1a18; --shear: #6ea8ec; --moment: #c48ae6; --defl: #4fc7c5; --beam: #6b7785;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  header.top {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    padding: 14px 24px; background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  header.top h1 { margin: 0; font-size: 20px; letter-spacing: .2px; }
+  header.top p { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+  .top-actions { display: flex; gap: 8px; }
+  button {
+    font: inherit; cursor: pointer; border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+    padding: 6px 12px; border-radius: 6px;
+  }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover { filter: brightness(1.08); color: #fff; }
+
+  main {
+    display: grid; grid-template-columns: minmax(300px, 380px) minmax(0, 1fr); gap: 20px;
+    padding: 20px 24px 40px; max-width: 1400px; margin: 0 auto;
+  }
+  @media (max-width: 900px) { main { grid-template-columns: minmax(0, 1fr); padding: 16px; } header.top { padding: 12px 16px; } }
+
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  .card h2 { margin: 0 0 12px; font-size: 13px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); }
+  .card h2 .sub { text-transform: none; letter-spacing: 0; font-weight: 400; }
+
+  label.field { display: block; margin-bottom: 10px; }
+  label.field > span { display: block; font-size: 12px; color: var(--muted); margin-bottom: 3px; }
+  input[type=number], select {
+    width: 100%; font: inherit; color: var(--ink); background: var(--panel);
+    border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px;
+  }
+  input[type=number]:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .invalid { border-color: var(--fail) !important; background: var(--fail-bg) !important; }
+
+  .seg { display: flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; margin-bottom: 12px; }
+  .seg label { flex: 1; text-align: center; cursor: pointer; padding: 6px 4px; font-size: 13px; }
+  .seg label + label { border-left: 1px solid var(--line); }
+  .seg input { position: absolute; opacity: 0; pointer-events: none; }
+  .seg label:has(input:checked) { background: var(--accent); color: #fff; }
+  .seg label:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+  .check { display: flex; align-items: center; gap: 8px; margin: 6px 0 10px; cursor: pointer; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  .props { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; font-size: 12.5px; background: var(--soft);
+    border-radius: 6px; padding: 8px 10px; margin-top: 4px; }
+  .props dt { color: var(--muted); }
+  .props dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+
+  .load { border: 1px solid var(--line); border-left: 4px solid var(--dead); border-radius: 7px; padding: 10px; margin-bottom: 10px; }
+  .load.tag-L { border-left-color: var(--live); }
+  .load-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .load-head strong { flex: 1; font-size: 13px; }
+  .load-head select { width: auto; padding: 3px 6px; font-size: 12.5px; }
+  .load-head button { padding: 2px 9px; line-height: 1.2; }
+  .load-fields { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .load-fields.two { grid-template-columns: repeat(2, 1fr); }
+  .load-fields label span { display: block; font-size: 11.5px; color: var(--muted); margin-bottom: 2px; }
+  .add-row { display: flex; gap: 8px; }
+  .add-row button { flex: 1; }
+  .empty { color: var(--muted); font-size: 13px; margin: 0 0 10px; }
+
+  .errors { background: var(--fail-bg); color: var(--fail); border: 1px solid var(--fail); border-radius: 8px;
+    padding: 10px 14px; margin-bottom: 16px; }
+  .errors ul { margin: 4px 0 0; padding-left: 18px; }
+  .hidden { display: none !important; }
+
+  .verdict { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+  .badge { font-weight: 700; padding: 5px 12px; border-radius: 999px; font-size: 13px; }
+  .badge.pass { background: var(--pass-bg); color: var(--pass); }
+  .badge.fail { background: var(--fail-bg); color: var(--fail); }
+  .verdict .note { color: var(--muted); font-size: 13px; }
+
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th { font-size: 12px; color: var(--muted); font-weight: 600; }
+  td.num, th.num { text-align: right; }
+  .ratio { display: flex; align-items: center; gap: 8px; min-width: 130px; }
+  .bar { flex: 1; height: 7px; background: var(--soft); border-radius: 4px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; background: var(--pass); }
+  .bar > i.over { background: var(--fail); }
+  .pill { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+  .pill.pass { background: var(--pass-bg); color: var(--pass); }
+  .pill.fail { background: var(--fail-bg); color: var(--fail); }
+  .reactions { margin-top: 10px; color: var(--muted); font-size: 13px; }
+  .reactions b { color: var(--ink); font-weight: 600; }
+
+  svg.plot { display: block; width: 100%; }
+  svg text { fill: var(--ink); font-size: 12.5px; font-family: inherit; }
+  svg .tick { fill: var(--muted); font-size: 11.5px; }
+  svg .ylab { fill: var(--muted); font-size: 12px; }
+  svg .grid { stroke: var(--line); stroke-width: 1; }
+  svg .axis { stroke: var(--muted); stroke-width: 1.2; }
+  svg .s-shear .area { fill: var(--shear); fill-opacity: .14; }
+  svg .s-shear .ln { stroke: var(--shear); }
+  svg .s-moment .area { fill: var(--moment); fill-opacity: .14; }
+  svg .s-moment .ln { stroke: var(--moment); }
+  svg .s-defl .area { fill: var(--defl); fill-opacity: .12; }
+  svg .s-defl .ln { stroke: var(--defl); }
+  svg .s-live .ln { stroke: var(--live); stroke-dasharray: 6 4; stroke-width: 1.6; }
+  svg .ln { fill: none; stroke-width: 2; }
+  svg .mark { fill: var(--panel); stroke: var(--ink); stroke-width: 1.5; }
+  svg .lbl { font-weight: 600; }
+  svg .beam { fill: var(--beam); }
+  svg .sup { fill: none; stroke: var(--ink); stroke-width: 1.5; }
+  svg .supfill { fill: var(--soft); stroke: var(--ink); stroke-width: 1.5; }
+  svg .ld-D line, svg .ld-D path { stroke: var(--dead); stroke-width: 1.6; fill: none; }
+  svg .ld-D polygon { fill: var(--dead); }
+  svg .ld-D text { fill: var(--dead); }
+  svg .ld-L line, svg .ld-L path { stroke: var(--live); stroke-width: 1.6; fill: none; stroke-dasharray: 5 3; }
+  svg .ld-L polygon { fill: var(--live); }
+  svg .ld-L text { fill: var(--live); }
+  svg .react line { stroke: var(--accent); stroke-width: 1.8; }
+  svg .react polygon { fill: var(--accent); }
+  svg .react text { fill: var(--accent); font-weight: 600; }
+  svg .dim line { stroke: var(--muted); stroke-width: 1; }
+  svg .dim text { fill: var(--muted); }
+
+  .legend { display: flex; gap: 18px; font-size: 12.5px; color: var(--muted); margin-top: 6px; flex-wrap: wrap; }
+  .legend i { display: inline-block; width: 26px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 6px; }
+  .legend .d i { border-color: var(--dead); }
+  .legend .l i { border-color: var(--live); border-top-style: dashed; }
+  .legend .r i { border-color: var(--accent); }
+  .legend .t i { border-color: var(--defl); }
+
+  .legend .s i { border-color: var(--beam); border-top-width: 4px; }
+
+  /* ---------- interactivity ---------- */
+  .card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+  .card-head h2 { margin: 0; }
+  .tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); }
+  .tools select { width: auto; padding: 3px 6px; font-size: 12.5px; }
+  .tools button { padding: 3px 10px; font-size: 12.5px; }
+  button.danger { border-color: var(--fail); color: var(--fail); }
+  .hint { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
+  svg.probe { cursor: crosshair; touch-action: pan-y; }
+  svg.probe:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+  svg .cur .cx { stroke: var(--ink); stroke-width: 1; stroke-dasharray: 3 3; opacity: .65; }
+  svg .cur.pinned .cx { stroke-dasharray: none; opacity: .4; }
+  svg .cur .tipbg { fill: var(--panel); stroke: var(--line); }
+  svg .cur text { font-size: 12px; font-weight: 600; }
+  svg .cdot { fill: var(--panel); stroke-width: 2.2; }
+  svg .c-shear { stroke: var(--shear); } svg .c-moment { stroke: var(--moment); }
+  svg .c-defl { stroke: var(--defl); } svg .c-live { stroke: var(--live); } svg .c-beam { stroke: var(--ink); }
+  svg .drag { cursor: grab; touch-action: none; }
+  svg .drag .hit { fill: transparent; stroke: none; }
+  svg .drag:hover .hit { fill: var(--accent); fill-opacity: .07; }
+  svg .handle { fill: var(--panel); stroke: var(--accent); stroke-width: 1.5; }
+  svg.dragging, svg.dragging .drag { cursor: grabbing; }
+  svg .beam-ghost { fill: none; stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 4; opacity: .7; }
+  svg .beam-poly { fill: var(--beam); stroke: none; }
+  svg .beam-poly.bad { fill: var(--fail); animation: pulse 1.6s ease-in-out infinite; }
+  svg .limit line { stroke: var(--fail); stroke-width: 1.2; stroke-dasharray: 2 3; }
+  svg .limit text { fill: var(--fail); font-size: 11px; }
+  svg .failtxt { fill: var(--fail); font-weight: 700; font-size: 13px; }
+  svg .debris { fill: var(--fail); }
+  svg .flash { fill: var(--fail); }
+  @keyframes pulse { 50% { opacity: .6; } }
+  @keyframes shake { 0%, 100% { transform: translateX(0); } 20% { transform: translateX(-6px); } 40% { transform: translateX(5px); }
+    60% { transform: translateX(-4px); } 80% { transform: translateX(2px); } }
+  .card.shake { animation: shake .45s ease-in-out; border-color: var(--fail); }
+
+  .slider input[type=range] { width: 100%; accent-color: var(--accent); margin: 4px 0 2px; }
+  .slider b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .factor-track { height: 4px; border-radius: 2px; margin: 0 2px 6px; background: var(--pass); }
+
+  .xsec-read { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 6px; margin-top: 8px; }
+  .xsec-read div { background: var(--soft); border-radius: 6px; padding: 6px 9px; }
+  .xsec-read span { display: block; font-size: 11.5px; color: var(--muted); }
+  .xsec-read b { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .xsec-read b.over { color: var(--fail); }
+  svg .na { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 5 4; }
+  svg .shape { fill: var(--soft); stroke: var(--ink); stroke-width: 1.5; }
+  svg .st-c { fill: var(--moment); fill-opacity: .28; stroke: var(--moment); stroke-width: 1.5; }
+  svg .st-t { fill: var(--accent); fill-opacity: .22; stroke: var(--accent); stroke-width: 1.5; }
+  svg .st-v { fill: var(--shear); fill-opacity: .22; stroke: var(--shear); stroke-width: 1.5; }
+  svg .st-over { fill: var(--fail); fill-opacity: .3; stroke: var(--fail); }
+  svg .allow { stroke: var(--fail); stroke-width: 1.2; stroke-dasharray: 4 3; }
+  svg .ctitle { fill: var(--muted); font-size: 12px; font-weight: 600; }
+
+  .compare { display: grid; gap: 4px; }
+  .cmp-row { display: grid; grid-template-columns: 70px 70px minmax(60px, 1fr) 44px 150px; align-items: center; gap: 10px;
+    text-align: left; padding: 5px 8px; border-radius: 6px; font-variant-numeric: tabular-nums; }
+  .cmp-row.current { border-color: var(--accent); background: var(--soft); font-weight: 600; }
+  .cmp-row .wt, .cmp-row .gv { color: var(--muted); font-size: 12.5px; }
+  .cmp-row .cbar { position: relative; height: 9px; background: var(--soft); border-radius: 5px; overflow: hidden; }
+  .cmp-row .cbar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--pass); border-radius: 5px; }
+  .cmp-row.fail .cbar i { background: var(--fail); }
+  .cmp-row .cbar b { position: absolute; left: 50%; top: -2px; bottom: -2px; width: 2px; background: var(--ink); opacity: .5; }
+  .cmp-row .rt { text-align: right; }
+  .tag { font-size: 11px; font-weight: 700; color: var(--pass); background: var(--pass-bg); border-radius: 999px; padding: 1px 6px; margin-left: 4px; }
+  @media (max-width: 560px) { .cmp-row { grid-template-columns: 62px minmax(50px, 1fr) 40px 104px; } .cmp-row .wt { display: none; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    svg .beam-poly.bad, .card.shake { animation: none; }
+  }
+
+  details.valid summary { cursor: pointer; font-weight: 600; }
+  details.valid table { margin-top: 10px; font-size: 13px; }
+  details.valid .case td { background: var(--soft); font-weight: 600; }
+  details.valid .ok { color: var(--pass); font-weight: 700; }
+  details.valid .bad { color: var(--fail); font-weight: 700; }
+  details.valid button { padding: 2px 8px; font-size: 12px; }
+  .foot { color: var(--muted); font-size: 12px; margin-top: 6px; }
+
+  @media print {
+    body { background: #fff; color: #000; font-size: 12px; }
+    header.top { border: 0; padding: 0 0 8px; }
+    .top-actions, .add-row, .load-head button, details.valid, .tools, .hint, svg .cur { display: none !important; }
+    .card.shake { animation: none; }
+    main { grid-template-columns: 1fr; padding: 0; gap: 0; }
+    .card { break-inside: avoid; border-color: #bbb; }
+    input, select { border-color: #bbb !important; }
+  }
+</style>
+</head>
+<body>
+<header class="top">
+  <div>
+    <h1>Beam Designer</h1>
+    <p>Single-span beam analysis with ASD bending, shear, and deflection checks</p>
+  </div>
+  <div class="top-actions">
+    <button type="button" id="btn-reset">Reset example</button>
+    <button type="button" class="primary" id="btn-print">Print</button>
+  </div>
+</header>
+
+<main>
+  <!-- ===================== INPUTS ===================== -->
+  <aside>
+    <section class="card">
+      <h2>Beam</h2>
+      <div class="seg" role="radiogroup" aria-label="Support type">
+        <label><input type="radio" name="support" value="ss">Simply supported</label>
+        <label><input type="radio" name="support" value="cant">Cantilever</label>
+      </div>
+      <label class="field"><span>Span L (ft)</span>
+        <input type="number" id="in-L" step="0.5" min="0">
+      </label>
+      <p class="foot" id="support-note"></p>
+    </section>
+
+    <section class="card">
+      <h2>Member</h2>
+      <div class="seg" role="radiogroup" aria-label="Material">
+        <label><input type="radio" name="material" value="steel">Steel W-shape</label>
+        <label><input type="radio" name="material" value="lumber">Lumber</label>
+      </div>
+      <label class="field"><span id="section-label">Section</span>
+        <select id="in-section"></select>
+      </label>
+      <div id="lumber-opts">
+        <label class="field"><span>Load duration factor C<sub>D</sub></span>
+          <select id="in-CD">
+            <option value="0.9">0.90: permanent (dead only)</option>
+            <option value="1">1.00: normal, 10 years (occupancy live)</option>
+            <option value="1.15">1.15: two months (snow)</option>
+            <option value="1.25">1.25: seven days (construction)</option>
+            <option value="1.6">1.60: ten minutes (wind/seismic)</option>
+          </select>
+        </label>
+        <label class="check"><input type="checkbox" id="in-rep"> Repetitive member (C<sub>r</sub> = 1.15, 2x and 4x only)</label>
+      </div>
+      <label class="check"><input type="checkbox" id="in-self"> Include self-weight (dead load)</label>
+      <dl class="props" id="props"></dl>
+    </section>
+
+    <section class="card">
+      <h2>Loads <span class="sub">(downward positive)</span></h2>
+      <div id="loads"></div>
+      <label class="field slider"><span>What-if load multiplier <b id="factor-val">×1.00</b></span>
+        <input type="range" id="in-factor" min="0" max="3" step="0.05" value="1" aria-describedby="reserve">
+      </label>
+      <div class="factor-track" id="factor-track" aria-hidden="true"></div>
+      <p class="foot" id="reserve"></p>
+      <div class="add-row">
+        <button type="button" id="add-point">+ Point load</button>
+        <button type="button" id="add-udl">+ Uniform load</button>
+      </div>
+    </section>
+  </aside>
+
+  <!-- ===================== RESULTS ===================== -->
+  <section>
+    <div class="errors hidden" id="errors"></div>
+
+    <div id="results">
+      <section class="card">
+        <h2>Design checks</h2>
+        <div class="verdict" id="verdict"></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Check</th><th class="num">Demand</th><th class="num">Capacity / limit</th><th>Ratio</th><th>Status</th></tr></thead>
+            <tbody id="checks"></tbody>
+          </table>
+        </div>
+        <div class="reactions" id="reactions"></div>
+      </section>
+
+      <section class="card" id="sketch-card">
+        <div class="card-head">
+          <h2>Loading and deflected shape</h2>
+          <div class="tools">
+            <label>Deflection scale
+              <select id="in-exag">
+                <option value="auto">Auto (limit-based)</option>
+                <option value="1">True scale (×1)</option>
+                <option value="10">×10</option>
+                <option value="50">×50</option>
+                <option value="200">×200</option>
+              </select>
+            </label>
+            <button type="button" class="danger hidden" id="btn-replay">Replay failure</button>
+          </div>
+        </div>
+        <svg class="plot probe" id="sketch" tabindex="0" role="img" aria-label="Beam loading sketch with deflected shape. Drag loads to move them; use arrow keys to move the probe."></svg>
+        <div class="legend"><span class="d"><i></i>Dead load</span><span class="l"><i></i>Live load</span><span class="r"><i></i>Reaction</span><span class="s"><i></i><span id="exag-note">Deflected shape</span></span></div>
+        <p class="hint">Drag a load to move it (drag the round handles to stretch a uniform load). Hover or tap any plot to read values; click to pin the probe; arrow keys move it.</p>
+      </section>
+
+      <section class="card">
+        <h2>Shear V <span class="sub">(kips)</span></h2>
+        <svg class="plot probe" id="d-shear" tabindex="0" role="img" aria-label="Shear diagram"></svg>
+      </section>
+
+      <section class="card">
+        <h2>Moment M <span class="sub">(kip-ft, positive = sagging)</span></h2>
+        <svg class="plot probe" id="d-moment" tabindex="0" role="img" aria-label="Moment diagram"></svg>
+      </section>
+
+      <section class="card">
+        <h2>Deflection <span class="sub">(in, shown below the beam when downward)</span></h2>
+        <svg class="plot probe" id="d-defl" tabindex="0" role="img" aria-label="Deflection diagram"></svg>
+        <div class="legend"><span class="t"><i></i>Total (D + L)</span><span class="l"><i></i>Live only</span></div>
+      </section>
+
+      <section class="card">
+        <h2>Stresses at the probe <span class="sub" id="xsec-sub"></span></h2>
+        <svg class="plot" id="xsec" role="img" aria-label="Cross-section with bending and shear stress distributions at the probe location"></svg>
+        <div class="xsec-read" id="xsec-read"></div>
+      </section>
+
+      <section class="card">
+        <h2>Section comparison <span class="sub">(same loads; click a row to switch)</span></h2>
+        <div class="compare" id="compare"></div>
+        <p class="foot">Bar length is the governing ratio of the four checks; the dark tick marks 1.0. Sorted lightest to heaviest.</p>
+      </section>
+    </div>
+
+    <section class="card">
+      <details class="valid" id="valid">
+        <summary id="valid-summary">Validation cases</summary>
+        <div class="table-wrap"><table id="valid-table"></table></div>
+        <p class="foot">Each computed value must be within 0.5% of the hand calculation (see spec.md and 02_validation/).</p>
+      </details>
+    </section>
+  </section>
+</main>
+
+<!-- ===================== ENGINE (no DOM access) ===================== -->
+<script id="engine">
+/* Units: inputs in ft, kips, kip/ft. Section properties in inches.
+   Internal deflection math in kips and inches. */
+
+const STEEL = { grade: 'A992', Fy: 50, E: 29000 };   // ksi
+STEEL.Fb = 0.66 * STEEL.Fy;                           // 33 ksi, compact and fully braced
+
+// AISC Shapes Database v16.0 (verify before release). Source copy: 01_data/w_shapes_aisc_v16.csv
+const W_SHAPES = [
+  { name: 'W8x10',  A: 2.96, d: 7.89, tw: 0.170, Ix: 30.8, Sx: 7.81, Zx: 8.87, wt: 10 },
+  { name: 'W8x18',  A: 5.26, d: 8.14, tw: 0.230, Ix: 61.9, Sx: 15.2, Zx: 17.0, wt: 18 },
+  { name: 'W10x12', A: 3.54, d: 9.87, tw: 0.190, Ix: 53.8, Sx: 10.9, Zx: 12.6, wt: 12 },
+  { name: 'W10x22', A: 6.49, d: 10.2, tw: 0.240, Ix: 118,  Sx: 23.2, Zx: 26.0, wt: 22 },
+  { name: 'W12x14', A: 4.16, d: 11.9, tw: 0.200, Ix: 88.6, Sx: 14.9, Zx: 17.4, wt: 14 },
+  { name: 'W12x26', A: 7.65, d: 12.2, tw: 0.230, Ix: 204,  Sx: 33.4, Zx: 37.2, wt: 26 },
+  { name: 'W14x22', A: 6.49, d: 13.7, tw: 0.230, Ix: 199,  Sx: 29.0, Zx: 33.2, wt: 22 },
+  { name: 'W16x26', A: 7.68, d: 15.7, tw: 0.250, Ix: 301,  Sx: 38.4, Zx: 44.2, wt: 26 },
+  { name: 'W18x35', A: 10.3, d: 17.7, tw: 0.300, Ix: 510,  Sx: 57.6, Zx: 66.5, wt: 35 },
+  { name: 'W21x44', A: 13.0, d: 20.7, tw: 0.350, Ix: 843,  Sx: 81.6, Zx: 95.4, wt: 44 },
+  { name: 'W24x55', A: 16.2, d: 23.6, tw: 0.395, Ix: 1350, Sx: 114,  Zx: 134,  wt: 55 },
+];
+
+// DF-L No. 2, NDS Supplement Tables 4A (dimension) and 4D (beams & stringers). psi.
+// Source copy: 01_data/lumber_dfl_no2.csv
+const LUMBER = [
+  { name: '2x6',  b: 1.5, d: 5.5,   kind: 'dim',    Fb: 900, Fv: 180, E: 1600000, CF: 1.3 },
+  { name: '2x8',  b: 1.5, d: 7.25,  kind: 'dim',    Fb: 900, Fv: 180, E: 1600000, CF: 1.2 },
+  { name: '2x10', b: 1.5, d: 9.25,  kind: 'dim',    Fb: 900, Fv: 180, E: 1600000, CF: 1.1 },
+  { name: '2x12', b: 1.5, d: 11.25, kind: 'dim',    Fb: 900, Fv: 180, E: 1600000, CF: 1.0 },
+  { name: '4x6',  b: 3.5, d: 5.5,   kind: 'dim',    Fb: 900, Fv: 180, E: 1600000, CF: 1.3 },
+  { name: '4x8',  b: 3.5, d: 7.25,  kind: 'dim',    Fb: 900, Fv: 180, E: 1600000, CF: 1.3 },
+  { name: '4x10', b: 3.5, d: 9.25,  kind: 'dim',    Fb: 900, Fv: 180, E: 1600000, CF: 1.2 },
+  { name: '4x12', b: 3.5, d: 11.25, kind: 'dim',    Fb: 900, Fv: 180, E: 1600000, CF: 1.1 },
+  { name: '6x10', b: 5.5, d: 9.5,   kind: 'timber', Fb: 875, Fv: 170, E: 1300000, CF: 1.0 },
+  { name: '6x12', b: 5.5, d: 11.5,  kind: 'timber', Fb: 875, Fv: 170, E: 1300000, CF: 1.0 },
+];
+const WOOD_DENSITY_PCF = 35;
+const N_STEPS = 2000;
+
+/** Section, stiffness, self-weight, and allowable values for the chosen member. */
+function getMember(cfg) {
+  if (cfg.material === 'steel') {
+    const s = W_SHAPES.find(r => r.name === cfg.section);
+    if (!s) return null;
+    const Va = 0.6 * STEEL.Fy * s.d * s.tw / 1.50;     // kips, Cv = 1.0
+    return {
+      material: 'steel', name: s.name, props: s,
+      E: STEEL.E, I: s.Ix, S: s.Sx, A: s.A, wSelf: s.wt / 1000,
+      bending: { cap: STEEL.Fb, unit: 'ksi', dec: 1, demand: M => Math.abs(M) * 12 / s.Sx,
+                 label: 'Bending, fb = M / Sx', capLabel: 'Fb = 0.66Fy' },
+      shear:   { cap: Va, unit: 'kips', dec: 2, demand: V => Math.abs(V),
+                 label: 'Shear, V', capLabel: 'Va = 0.6Fy·d·tw / 1.50' },
+    };
+  }
+  const w = LUMBER.find(r => r.name === cfg.section);
+  if (!w) return null;
+  const A = w.b * w.d, S = w.b * w.d * w.d / 6, I = w.b * w.d ** 3 / 12;
+  const CD = cfg.CD;
+  const Cr = (cfg.repetitive && w.kind === 'dim') ? 1.15 : 1.0;
+  const Fbp = w.Fb * CD * w.CF * Cr, Fvp = w.Fv * CD;
+  return {
+    material: 'lumber', name: w.name, props: { ...w, A, S, I, CD, Cr, Fbp, Fvp },
+    E: w.E / 1000, I, S, A, wSelf: WOOD_DENSITY_PCF * A / 144 / 1000,
+    bending: { cap: Fbp, unit: 'psi', dec: 0, demand: M => Math.abs(M) * 12000 / S,
+               label: 'Bending, fb = M / S', capLabel: "Fb' = Fb·CD·CF·Cr" },
+    shear:   { cap: Fvp, unit: 'psi', dec: 1, demand: V => 1.5 * Math.abs(V) * 1000 / A,
+               label: 'Shear, fv = 1.5V / A', capLabel: "Fv' = Fv·CD" },
+  };
+}
+
+/** Input checks. Returns [{msg, field}] where field identifies the offending input. */
+function validateCfg(cfg) {
+  const errs = [];
+  const L = cfg.L;
+  if (!Number.isFinite(L) || L <= 0) errs.push({ msg: 'Span must be a number greater than 0.', field: 'L' });
+  else if (L > 200) errs.push({ msg: 'Span must be 200 ft or less.', field: 'L' });
+  const Lok = Number.isFinite(L) && L > 0;
+  cfg.loads.forEach((ld, i) => {
+    const n = i + 1;
+    if (ld.type === 'point') {
+      if (!Number.isFinite(ld.P)) errs.push({ msg: `Load ${n}: enter a magnitude P.`, field: `${i}-P` });
+      if (!Number.isFinite(ld.x)) errs.push({ msg: `Load ${n}: enter a position x.`, field: `${i}-x` });
+      else if (Lok && (ld.x < 0 || ld.x > L)) errs.push({ msg: `Load ${n}: position must be between 0 and ${L} ft.`, field: `${i}-x` });
+    } else {
+      if (!Number.isFinite(ld.w)) errs.push({ msg: `Load ${n}: enter a magnitude w.`, field: `${i}-w` });
+      const okA = Number.isFinite(ld.x1), okB = Number.isFinite(ld.x2);
+      if (!okA) errs.push({ msg: `Load ${n}: enter a start position.`, field: `${i}-x1` });
+      if (!okB) errs.push({ msg: `Load ${n}: enter an end position.`, field: `${i}-x2` });
+      if (okA && Lok && (ld.x1 < 0 || ld.x1 > L)) errs.push({ msg: `Load ${n}: start must be between 0 and ${L} ft.`, field: `${i}-x1` });
+      if (okB && Lok && (ld.x2 < 0 || ld.x2 > L)) errs.push({ msg: `Load ${n}: end must be between 0 and ${L} ft.`, field: `${i}-x2` });
+      if (okA && okB && ld.x2 <= ld.x1) errs.push({ msg: `Load ${n}: end must be greater than start.`, field: `${i}-x2` });
+    }
+  });
+  return errs;
+}
+
+/** Statics + numerical double integration for one set of loads. */
+function analyze(L, support, loads, E, I) {
+  // Total load F (kips) and its moment about the left end Mo (kip-ft)
+  let F = 0, Mo = 0;
+  for (const ld of loads) {
+    if (ld.type === 'point') { F += ld.P; Mo += ld.P * ld.x; }
+    else { const W = ld.w * (ld.x2 - ld.x1); F += W; Mo += W * (ld.x1 + ld.x2) / 2; }
+  }
+  let R1, R2, M0;
+  if (support === 'ss') { R2 = Mo / L; R1 = F - R2; M0 = 0; }
+  else { R1 = F; R2 = 0; M0 = -Mo; }   // fixed at left: vertical reaction and fixed-end moment
+
+  // V and M at x. side = -1 is just left of x, +1 just right.
+  function VM(x, side) {
+    let V = R1, M = M0 + R1 * x;
+    for (const ld of loads) {
+      if (ld.type === 'point') {
+        if (ld.x < x || (ld.x === x && side > 0)) { V -= ld.P; M -= ld.P * (x - ld.x); }
+      } else {
+        const a = ld.x1, b = Math.min(ld.x2, x);
+        if (b > a) { const W = ld.w * (b - a); V -= W; M -= W * (x - (a + b) / 2); }
+      }
+    }
+    return [V, M];
+  }
+
+  // Grid: uniform steps plus every load location and uniform-load end
+  const raw = [];
+  for (let i = 0; i <= N_STEPS; i++) raw.push(L * i / N_STEPS);
+  for (const ld of loads) {
+    if (ld.type === 'point') raw.push(ld.x); else raw.push(ld.x1, ld.x2);
+  }
+  raw.sort((a, b) => a - b);
+  const xs = [];
+  for (const x of raw) if (!xs.length || x - xs[xs.length - 1] > 1e-9 * L) xs.push(x);
+  const pointAt = new Set(loads.filter(l => l.type === 'point').map(l => l.x));
+
+  const M = [], shearPts = [];
+  let Vmax = { v: -Infinity, x: 0 }, Vmin = { v: Infinity, x: 0 };
+  const track = (v, x) => {
+    if (v > Vmax.v) Vmax = { v, x };
+    if (v < Vmin.v) Vmin = { v, x };
+  };
+  xs.forEach((x, i) => {
+    const last = i === xs.length - 1;
+    const [Vl, Mx] = VM(x, -1);
+    M.push(Mx);
+    if (i === 0) { const Vr = VM(x, 1)[0]; shearPts.push([x, Vr]); track(Vr, x); }
+    else if (last) { shearPts.push([x, Vl]); track(Vl, x); }
+    else {
+      shearPts.push([x, Vl]); track(Vl, x);
+      if (pointAt.has(x)) { const Vr = VM(x, 1)[0]; shearPts.push([x, Vr]); track(Vr, x); }
+    }
+  });
+
+  // Moment extremes
+  let Mmax = { v: -Infinity, x: 0 }, Mmin = { v: Infinity, x: 0 };
+  M.forEach((m, i) => {
+    if (m > Mmax.v) Mmax = { v: m, x: xs[i] };
+    if (m < Mmin.v) Mmin = { v: m, x: xs[i] };
+  });
+
+  // Deflection: EI y'' = M, y positive up. Trapezoidal integration in inches.
+  const EI = E * I;
+  const n = xs.length, th = new Array(n).fill(0), y = new Array(n).fill(0);
+  for (let i = 1; i < n; i++) {
+    const dx = (xs[i] - xs[i - 1]) * 12;
+    th[i] = th[i - 1] + 0.5 * (M[i - 1] + M[i]) * 12 / EI * dx;
+    y[i] = y[i - 1] + 0.5 * (th[i - 1] + th[i]) * dx;
+  }
+  if (support === 'ss') {             // y(0) = y(L) = 0
+    const yL = y[n - 1], xL = xs[n - 1];
+    for (let i = 0; i < n; i++) y[i] -= yL * xs[i] / xL;
+  }                                   // cantilever: y(0) = 0, slope(0) = 0 already
+  const D = y.map(v => -v);           // downward positive
+  let dIdx = 0;
+  D.forEach((d, i) => { if (Math.abs(d) > Math.abs(D[dIdx])) dIdx = i; });
+
+  const Vabs = Math.max(Math.abs(Vmax.v), Math.abs(Vmin.v));
+  const Mabs = Math.max(Math.abs(Mmax.v), Math.abs(Mmin.v));
+  return {
+    xs, M, D, shearPts, R1, R2, M0,
+    Vmax, Vmin, Vabs, Mmax, Mmin, Mabs,
+    MabsX: Math.abs(Mmax.v) >= Math.abs(Mmin.v) ? Mmax.x : Mmin.x,
+    dMax: D[dIdx], dX: xs[dIdx],
+  };
+}
+
+/** Full design: three load cases and four checks. */
+function design(cfg) {
+  const errors = validateCfg(cfg);
+  const member = getMember(cfg);
+  if (!member) errors.push({ msg: 'Choose a section.', field: 'section' });
+  if (errors.length) return { errors, member };
+
+  // What-if multiplier scales the entered loads (not self-weight). Defaults to 1.
+  const f = Number.isFinite(cfg.factor) && cfg.factor >= 0 ? cfg.factor : 1;
+  const loads = cfg.loads.map(l => (l.type === 'point' ? { ...l, P: l.P * f } : { ...l, w: l.w * f }));
+  if (cfg.selfWeight) loads.push({ type: 'udl', w: member.wSelf, x1: 0, x2: cfg.L, tag: 'D', self: true });
+  const run = list => analyze(cfg.L, cfg.support, list, member.E, member.I);
+  const total = run(loads);
+  const live = run(loads.filter(l => l.tag === 'L'));
+  const dead = run(loads.filter(l => l.tag === 'D'));
+
+  const Leff = cfg.support === 'ss' ? cfg.L : 2 * cfg.L;
+  const Lname = cfg.support === 'ss' ? 'L' : '2L';
+  const mk = (label, demand, cap, unit, dec, capLabel) => ({
+    label, demand, cap, unit, dec, capLabel,
+    ratio: cap > 0 ? demand / cap : Infinity,
+    pass: demand <= cap * (1 + 1e-9),
+  });
+  const b = member.bending, s = member.shear;
+  const checks = {
+    bending: mk(b.label, b.demand(total.Mabs), b.cap, b.unit, b.dec, b.capLabel),
+    shear: mk(s.label, s.demand(total.Vabs), s.cap, s.unit, s.dec, s.capLabel),
+    live: mk('Live-load deflection', Math.abs(live.dMax), Leff * 12 / 360, 'in', 3, `${Lname}/360`),
+    total: mk('Total-load deflection', Math.abs(total.dMax), Leff * 12 / 240, 'in', 3, `${Lname}/240`),
+  };
+  return { errors: [], member, loads, total, live, dead, checks, Leff };
+}
+
+/** Multiplier on the entered loads at which the first check reaches 1.0.
+    Every ratio is linear in the multiplier (self-weight stays fixed), so two runs give it exactly
+    for same-sign loads. Returns { k, label } with k = Infinity when loads do not affect any check. */
+function reserveFactor(cfg) {
+  const r1 = design({ ...cfg, factor: 1 }), r0 = design({ ...cfg, factor: 0 });
+  if (r1.errors.length) return null;
+  let best = { k: Infinity, label: '' };
+  for (const key of ['bending', 'shear', 'live', 'total']) {
+    const a = r0.checks[key].ratio, b = r1.checks[key].ratio - a;
+    if (a >= 1) return { k: 0, label: r0.checks[key].label };
+    if (b > 1e-12 && (1 - a) / b < best.k) best = { k: (1 - a) / b, label: r1.checks[key].label };
+  }
+  return best;
+}
+
+/* ---------- Validation cases (spec.md) ---------- */
+const BASE = { support: 'ss', L: 20, material: 'steel', section: 'W12x26', CD: 1, repetitive: false, selfWeight: false };
+const VALIDATION = [
+  { name: '1. 20 ft SS W12x26, 1 kip/ft live',
+    cfg: { ...BASE, loads: [{ type: 'udl', w: 1, x1: 0, x2: 20, tag: 'L' }] },
+    expect: [
+      ['R left (kips)', r => r.total.R1, 10.0],
+      ['V max (kips)', r => r.total.Vabs, 10.0],
+      ['M max (kip-ft)', r => r.total.Mabs, 50.0],
+      ['fb (ksi)', r => r.checks.bending.demand, 18.0],
+      ['Va (kips)', r => r.checks.shear.cap, 56.1],
+      ['Δ live (in)', r => r.checks.live.demand, 0.609],
+      ['L/360 (in)', r => r.checks.live.cap, 0.667],
+    ] },
+  { name: '2. 20 ft SS W12x26, 10 kip live at midspan',
+    cfg: { ...BASE, loads: [{ type: 'point', P: 10, x: 10, tag: 'L' }] },
+    expect: [
+      ['M max (kip-ft)', r => r.total.Mabs, 50.0],
+      ['Δ (in)', r => r.checks.live.demand, 0.487],
+    ] },
+  { name: '3. 20 ft SS W12x26, 10 kip live at x = 5 ft',
+    cfg: { ...BASE, loads: [{ type: 'point', P: 10, x: 5, tag: 'L' }] },
+    expect: [
+      ['R left (kips)', r => r.total.R1, 7.5],
+      ['R right (kips)', r => r.total.R2, 2.5],
+      ['M max (kip-ft)', r => r.total.Mabs, 37.5],
+      ['x at M max (ft)', r => r.total.MabsX, 5.00],
+      ['Δ max (in)', r => r.checks.live.demand, 0.340],
+      ['x at Δ max (ft)', r => r.total.dX, 8.82],
+    ] },
+  { name: '4. 10 ft cantilever W8x18, 2 kip live at tip',
+    cfg: { ...BASE, support: 'cant', L: 10, section: 'W8x18', loads: [{ type: 'point', P: 2, x: 10, tag: 'L' }] },
+    expect: [
+      ['M max (kip-ft)', r => r.total.Mabs, 20.0],
+      ['fb (ksi)', r => r.checks.bending.demand, 15.8],
+      ['Δ tip (in)', r => r.checks.live.demand, 0.642],
+      ['2L/360 (in)', r => r.checks.live.cap, 0.667],
+    ] },
+  { name: '5. 12 ft SS 2x10 DF-L No. 2, 100 plf live, repetitive',
+    cfg: { ...BASE, L: 12, material: 'lumber', section: '2x10', repetitive: true,
+           loads: [{ type: 'udl', w: 0.1, x1: 0, x2: 12, tag: 'L' }] },
+    expect: [
+      ['M max (kip-ft)', r => r.total.Mabs, 1.80],
+      ['fb (psi)', r => r.checks.bending.demand, 1010],
+      ["Fb' (psi)", r => r.checks.bending.cap, 1139],
+      ['fv (psi)', r => r.checks.shear.demand, 64.9],
+      ['Δ (in)', r => r.checks.live.demand, 0.295],
+      ['L/360 (in)', r => r.checks.live.cap, 0.400],
+    ] },
+  { name: '6. Case 1 with self-weight (26 plf dead)',
+    cfg: { ...BASE, selfWeight: true, loads: [{ type: 'udl', w: 1, x1: 0, x2: 20, tag: 'L' }] },
+    expect: [
+      ['M max (kip-ft)', r => r.total.Mabs, 51.3],
+      ['Δ total (in)', r => r.checks.total.demand, 0.625],
+      ['L/240 (in)', r => r.checks.total.cap, 1.00],
+    ] },
+];
+const VALID_TOL = 0.005;
+
+function runValidation() {
+  return VALIDATION.map(c => {
+    const r = design(c.cfg);
+    const rows = c.expect.map(([label, get, exp]) => {
+      const got = r.errors.length ? NaN : get(r);
+      const diff = Math.abs(got - exp) / Math.abs(exp);
+      return { label, exp, got, diff, ok: diff <= VALID_TOL };
+    });
+    return { name: c.name, cfg: c.cfg, rows, ok: rows.every(x => x.ok) };
+  });
+}
+
+if (typeof module !== 'undefined') module.exports = { design, analyze, reserveFactor, getMember, validateCfg, runValidation, W_SHAPES, LUMBER };
+</script>
+
+<!-- ===================== UI ===================== -->
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const fx = (v, d) => {
+    const r = Number(v).toFixed(d);
+    return /^-0\.?0*$/.test(r) ? r.slice(1) : r;
+  };
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+  const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const PAD_L = 56, PAD_R = 56;      // shared x-mapping so the probe lines up on every plot
+  const FAIL_MS = 1200;
+
+  const defaultCfg = () => ({
+    support: 'ss', L: 20, material: 'steel', section: 'W12x26', CD: 1, repetitive: false, selfWeight: false, factor: 1,
+    loads: [{ type: 'udl', w: 1, x1: 0, x2: 20, tag: 'L' }],
+  });
+  let cfg = defaultCfg();
+  let last = null;
+  const view = { hoverX: null, pinX: null, exag: 'auto' };
+  const plots = {};                  // id -> { svg, sx, X0, X1, snaps, cursor(x) }
+  const fail = { wasStrength: false, start: -Infinity, raf: 0 };
+  let drag = null;
+
+  /* ---------- helpers ---------- */
+  function interp(xs, ys, x) {
+    let lo = 0, hi = xs.length - 1;
+    if (x <= xs[0]) return ys[0];
+    if (x >= xs[hi]) return ys[hi];
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (xs[m] <= x) lo = m; else hi = m; }
+    const t = (x - xs[lo]) / (xs[hi] - xs[lo] || 1);
+    return ys[lo] + t * (ys[hi] - ys[lo]);
+  }
+  /** Shear at x from the step-aware point list; at a jump, returns the value just right of x. */
+  function shearAt(pts, x) {
+    let lo = 0, hi = pts.length - 1;
+    if (x <= pts[0][0]) return pts[0][1];
+    if (x >= pts[hi][0]) return pts[hi][1];
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (pts[m][0] <= x) lo = m; else hi = m; }
+    const a = pts[lo], b = pts[hi];
+    return b[0] > a[0] ? a[1] + (x - a[0]) / (b[0] - a[0]) * (b[1] - a[1]) : b[1];
+  }
+  function niceNum(v) {
+    if (!(v > 0) || !Number.isFinite(v)) return 1;
+    const p = Math.pow(10, Math.floor(Math.log10(v))), m = v / p;
+    return (m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10) * p;
+  }
+  const shortLabel = s => s.split(',')[0].toLowerCase();
+
+  /** Which failure to show: strength (bending/shear) breaks the beam, deflection only bends it too far. */
+  function failState(res) {
+    const c = res.checks, t = res.total;
+    if (!c.bending.pass || !c.shear.pass) {
+      const bend = !c.bending.pass && (c.shear.pass || c.bending.ratio >= c.shear.ratio);
+      const x = bend ? t.MabsX : (Math.abs(t.Vmax.v) >= Math.abs(t.Vmin.v) ? t.Vmax.x : t.Vmin.x);
+      const k = bend ? c.bending : c.shear;
+      return { kind: bend ? 'bending' : 'shear', x, ratio: k.ratio };
+    }
+    if (!c.live.pass || !c.total.pass) {
+      const k = c.total.ratio >= c.live.ratio ? c.total : c.live;
+      return { kind: 'deflection', x: t.dX, ratio: k.ratio, check: k };
+    }
+    return null;
+  }
+
+  /* ---------- inputs ---------- */
+  function fillSections() {
+    const list = cfg.material === 'steel' ? W_SHAPES : LUMBER;
+    $('in-section').innerHTML = list.map(s => `<option value="${s.name}">${s.name}</option>`).join('');
+    $('in-section').value = cfg.section;
+    $('section-label').textContent = cfg.material === 'steel' ? 'W-shape (A992, Fy = 50 ksi)' : 'Size (Douglas Fir-Larch No. 2)';
+    $('lumber-opts').classList.toggle('hidden', cfg.material !== 'lumber');
+  }
+
+  function syncInputs() {
+    document.querySelector(`input[name=support][value=${cfg.support}]`).checked = true;
+    document.querySelector(`input[name=material][value=${cfg.material}]`).checked = true;
+    $('in-L').value = cfg.L;
+    $('in-CD').value = String(cfg.CD);
+    $('in-rep').checked = cfg.repetitive;
+    $('in-self').checked = cfg.selfWeight;
+    if (!Number.isFinite(cfg.factor)) cfg.factor = 1;
+    $('in-factor').value = cfg.factor;
+    fillSections();
+    renderLoads();
+  }
+
+  function numField(i, k, label, val, step) {
+    return `<label><span>${label}</span><input type="number" step="${step}" data-i="${i}" data-k="${k}" value="${Number.isFinite(val) ? val : ''}"></label>`;
+  }
+
+  function renderLoads() {
+    const box = $('loads');
+    if (!cfg.loads.length) { box.innerHTML = '<p class="empty">No loads. Add a point or uniform load.</p>'; return; }
+    box.innerHTML = cfg.loads.map((ld, i) => {
+      const isPt = ld.type === 'point';
+      const fields = isPt
+        ? numField(i, 'P', 'P (kips)', ld.P, 0.5) + numField(i, 'x', 'x (ft)', ld.x, 0.5)
+        : numField(i, 'w', 'w (kip/ft)', ld.w, 0.05) + numField(i, 'x1', 'From (ft)', ld.x1, 0.5) + numField(i, 'x2', 'To (ft)', ld.x2, 0.5);
+      return `<div class="load tag-${ld.tag}" data-row="${i}">
+        <div class="load-head">
+          <strong>${i + 1}. ${isPt ? 'Point load' : 'Uniform load'}</strong>
+          <select data-i="${i}" data-k="tag" aria-label="Load type">
+            <option value="D"${ld.tag === 'D' ? ' selected' : ''}>Dead</option>
+            <option value="L"${ld.tag === 'L' ? ' selected' : ''}>Live</option>
+          </select>
+          <button type="button" data-del="${i}" aria-label="Remove load ${i + 1}" title="Remove">×</button>
+        </div>
+        <div class="load-fields${isPt ? ' two' : ''}">${fields}</div>
+      </div>`;
+    }).join('');
+  }
+
+  function renderProps(m) {
+    if (!m) { $('props').innerHTML = ''; return; }
+    const p = m.props;
+    const rows = m.material === 'steel'
+      ? [['d', `${p.d} in`], ['tw', `${p.tw} in`], ['A', `${p.A} in²`], ['Ix', `${p.Ix} in⁴`], ['Sx', `${p.Sx} in³`],
+         ['Weight', `${p.wt} lb/ft`], ['E', '29,000 ksi'], ['Fb = 0.66Fy', `${fx(m.bending.cap, 1)} ksi`], ['Va', `${fx(m.shear.cap, 1)} kips`]]
+      : [['b × d (actual)', `${p.b} × ${p.d} in`], ['A', `${fx(p.A, 2)} in²`], ['S', `${fx(p.S, 2)} in³`], ['I', `${fx(p.I, 1)} in⁴`],
+         ['E', `${p.E.toLocaleString()} psi`], ['Fb · CD · CF · Cr', `${p.Fb} · ${p.CD} · ${p.CF} · ${p.Cr}`],
+         ["Fb'", `${fx(p.Fbp, 0)} psi`], ["Fv'", `${fx(p.Fvp, 0)} psi`], ['Self-weight', `${fx(m.wSelf * 1000, 1)} lb/ft`]];
+    $('props').innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
+  }
+
+  function renderFactor() {
+    const f = cfg.factor;
+    $('factor-val').textContent = `×${fx(f, 2)}`;
+    const r = reserveFactor(cfg);
+    const max = Number($('in-factor').max);
+    if (!r) { $('reserve').textContent = ''; return; }
+    let pct = 100;
+    if (r.k === Infinity) $('reserve').textContent = 'The entered loads do not affect any check.';
+    else {
+      pct = clamp(r.k / max * 100, 0, 100);
+      $('reserve').innerHTML = r.k <= 0
+        ? `Self-weight alone exceeds the ${esc(shortLabel(r.label))} limit.`
+        : `First limit reached at <b>×${fx(r.k, 2)}</b> the entered loads (${esc(shortLabel(r.label))}). Slide past it to see the beam fail.`;
+    }
+    $('factor-track').style.background = `linear-gradient(to right, var(--pass) 0 ${pct}%, var(--fail) ${pct}% 100%)`;
+  }
+
+  /* ---------- results ---------- */
+  function renderChecks(res) {
+    const c = res.checks, list = [c.bending, c.shear, c.live, c.total];
+    $('checks').innerHTML = list.map(k => {
+      const w = Math.min(k.ratio, 1) * 100;
+      return `<tr>
+        <td>${k.label}</td>
+        <td class="num">${fx(k.demand, k.dec)} ${k.unit}</td>
+        <td class="num">${fx(k.cap, k.dec)} ${k.unit} <span style="color:var(--muted)">(${k.capLabel})</span></td>
+        <td><div class="ratio"><div class="bar"><i class="${k.pass ? '' : 'over'}" style="width:${w}%"></i></div>${fx(k.ratio, 2)}</div></td>
+        <td><span class="pill ${k.pass ? 'pass' : 'fail'}">${k.pass ? 'PASS' : 'FAIL'}</span></td>
+      </tr>`;
+    }).join('');
+    const failed = list.filter(k => !k.pass);
+    const gov = list.reduce((a, b) => (b.ratio > a.ratio ? b : a));
+    $('verdict').innerHTML = failed.length
+      ? `<span class="badge fail">FAILS: ${failed.map(k => shortLabel(k.label)).join(', ')}</span>`
+      : `<span class="badge pass">PASSES ALL CHECKS</span>`;
+    $('verdict').innerHTML += `<span class="note">${res.member.name}. Governing: ${shortLabel(gov.label)} at ${fx(gov.ratio, 2)}.` +
+      `${cfg.selfWeight ? ` Self-weight ${fx(res.member.wSelf * 1000, 1)} lb/ft included.` : ''}` +
+      `${cfg.factor !== 1 ? ` Entered loads × ${fx(cfg.factor, 2)} (what-if).` : ''}</span>`;
+
+    const t = res.total;
+    $('reactions').innerHTML = cfg.support === 'ss'
+      ? `Reactions (D + L): <b>R<sub>left</sub> = ${fx(t.R1, 2)} kips</b>, <b>R<sub>right</sub> = ${fx(t.R2, 2)} kips</b>`
+      : `Reactions at fixed end (D + L): <b>R = ${fx(t.R1, 2)} kips</b>, <b>M = ${fx(Math.abs(t.M0), 2)} kip-ft</b>`;
+  }
+
+  function arrow(x, yFrom, yTo, head = 7) {
+    const dir = yTo > yFrom ? 1 : -1;
+    return `<line x1="${x}" y1="${yFrom}" x2="${x}" y2="${yTo - dir * head}"/>` +
+      `<polygon points="${x},${yTo} ${x - head * 0.6},${yTo - dir * head} ${x + head * 0.6},${yTo - dir * head}"/>`;
+  }
+
+  /** Beam as a 10 px band around a centerline; optional jagged break edges at either end. */
+  function beamPath(pts, jagStart, jagEnd) {
+    const P = pts.map(([x, y]) => [x, y - 5]);
+    const [ex, ey] = pts[pts.length - 1], [sx0, sy0] = pts[0];
+    if (jagEnd) jagEnd.forEach(([dx, dy]) => P.push([ex + dx, ey + dy]));
+    for (let i = pts.length - 1; i >= 0; i--) P.push([pts[i][0], pts[i][1] + 5]);
+    if (jagStart) jagStart.slice().reverse().forEach(([dx, dy]) => P.push([sx0 + dx, sy0 + dy]));
+    return 'M' + P.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join('L') + 'Z';
+  }
+  const easeOutBounce = t => {
+    const n = 7.5625, d = 2.75;
+    if (t < 1 / d) return n * t * t;
+    if (t < 2 / d) return n * (t -= 1.5 / d) * t + 0.75;
+    if (t < 2.5 / d) return n * (t -= 2.25 / d) * t + 0.9375;
+    return n * (t -= 2.625 / d) * t + 0.984375;
+  };
+  const rnd = (i, k) => { const s = Math.sin(i * 12.9898 + k * 78.233) * 43758.5453; return s - Math.floor(s); };
+
+  function drawSketch(res, now = performance.now()) {
+    const svg = $('sketch');
+    const W = Math.max(320, svg.clientWidth || 800);
+    const udls = res.loads.map((l, i) => ({ ...l, i })).filter(l => l.type === 'udl');
+    const pts = res.loads.map((l, i) => ({ ...l, i })).filter(l => l.type === 'point');
+    const laneH = 42;
+    const beamY = Math.max(90, 50 + laneH * udls.length + (pts.length ? 40 : 0));
+    const H = beamY + 172;
+    const X0 = PAD_L, X1 = W - PAD_R, L = cfg.L;
+    const sx = x => X0 + (x / L) * (X1 - X0);
+    const top = beamY - 5;
+    const t = res.total;
+
+    // Deflected shape scale. Auto: the total-load limit is drawn about 36 px tall.
+    const pxPerIn = (X1 - X0) / (L * 12);
+    const lim = res.checks.total.cap;
+    const factor = view.exag === 'auto' ? Math.max(1, niceNum(36 / (lim * pxPerIn))) : Number(view.exag);
+    const MAXPX = 120;
+    let clipped = false;
+    const dyPx = d => {
+      const v = d * pxPerIn * factor;
+      if (Math.abs(v) > MAXPX) { clipped = true; return Math.sign(v) * MAXPX; }
+      return v;
+    };
+    const yBeam = x => beamY + dyPx(interp(t.xs, t.D, x));
+    const step = Math.max(1, Math.floor(t.xs.length / 320));
+    const cl = [];
+    for (let i = 0; i < t.xs.length; i += step) cl.push([sx(t.xs[i]), beamY + dyPx(t.D[i])]);
+    const lastI = t.xs.length - 1;
+    if ((lastI % step) !== 0) cl.push([sx(t.xs[lastI]), beamY + dyPx(t.D[lastI])]);
+
+    const fs = failState(res);
+    const strength = !!fs && fs.kind !== 'deflection';
+    const p = strength ? clamp((now - fail.start) / FAIL_MS, 0, 1) : 1;
+    let g = '';
+
+    // supports
+    if (cfg.support === 'ss') {
+      g += `<polygon class="supfill" points="${X0},${beamY + 5} ${X0 - 12},${beamY + 27} ${X0 + 12},${beamY + 27}"/>`;
+      g += `<line class="sup" x1="${X0 - 18}" y1="${beamY + 28}" x2="${X0 + 18}" y2="${beamY + 28}"/>`;
+      g += `<polygon class="supfill" points="${X1},${beamY + 5} ${X1 - 11},${beamY + 21} ${X1 + 11},${beamY + 21}"/>`;
+      g += `<circle class="supfill" cx="${X1 - 6}" cy="${beamY + 25}" r="3.5"/><circle class="supfill" cx="${X1 + 6}" cy="${beamY + 25}" r="3.5"/>`;
+      g += `<line class="sup" x1="${X1 - 18}" y1="${beamY + 29}" x2="${X1 + 18}" y2="${beamY + 29}"/>`;
+    } else {
+      g += `<line class="sup" x1="${X0}" y1="${beamY - 40}" x2="${X0}" y2="${beamY + 40}"/>`;
+      for (let y = beamY - 38; y <= beamY + 38; y += 9) g += `<line class="sup" x1="${X0}" y1="${y}" x2="${X0 - 10}" y2="${y + 9}"/>`;
+    }
+
+    // undeformed beam (ghost) and the deflection limit at the max-deflection point
+    g += `<line class="beam-ghost" x1="${X0}" y1="${beamY}" x2="${X1}" y2="${beamY}"/>`;
+    if (t.dMax > 0 && !strength) {
+      const ly = beamY + lim * pxPerIn * factor + 5;
+      if (lim * pxPerIn * factor <= MAXPX) {
+        const lx = sx(t.dX), anchor = lx > X1 - 60 ? 'end' : 'start';
+        g += `<g class="limit"><line x1="${lx - 30}" y1="${ly}" x2="${lx + 30}" y2="${ly}"/>` +
+          `<text x="${anchor === 'end' ? lx - 34 : lx + 34}" y="${ly + 4}" text-anchor="${anchor}">${esc(res.checks.total.capLabel)} limit</text></g>`;
+      }
+    }
+
+    // beam: intact, over-deflected, or breaking
+    if (!strength) {
+      g += `<path class="beam-poly${fs ? ' bad' : ''}" d="${beamPath(cl)}"/>`;
+    } else {
+      const xb = cfg.support === 'ss' ? clamp(fs.x, 0.08 * L, 0.92 * L) : clamp(fs.x, 0.03 * L, 0.97 * L);
+      const q = p < 0.22 ? 0 : easeOutBounce((p - 0.22) / 0.78);
+      // As the halves rotate, the elastic sag straightens out (collapse, not bending).
+      const flat = ([x, y]) => [x, beamY + (y - beamY) * (1 - q)];
+      const xbPx = sx(xb), ybPx = flat([xbPx, yBeam(xb)])[1];
+      const jag = fs.kind === 'shear'
+        ? [[-9, -5], [-4, -2], [-5, 0.5], [2, 2.5], [8, 5]]          // diagonal shear crack
+        : [[2, -5], [-2.5, -2.5], [2, 0], [-2, 2.5], [1.5, 5]];     // flexural crack
+      const left = cl.filter(c => c[0] < xbPx).map(flat).concat([[xbPx, ybPx]]);
+      const right = [[xbPx, ybPx]].concat(cl.filter(c => c[0] > xbPx).map(flat));
+      if (cfg.support === 'ss') {
+        const aL = Math.atan2(70, Math.max(30, xbPx - X0)) * 180 / Math.PI * q;
+        const aR = Math.atan2(70, Math.max(30, X1 - xbPx)) * 180 / Math.PI * q;
+        g += `<g transform="rotate(${aL.toFixed(2)} ${X0} ${beamY})"><path class="beam-poly bad" d="${beamPath(left, null, jag)}"/></g>`;
+        g += `<g transform="rotate(${(-aR).toFixed(2)} ${X1} ${beamY})"><path class="beam-poly bad" d="${beamPath(right, jag, null)}"/></g>`;
+      } else {
+        const a = Math.atan2(95, Math.max(30, X1 - xbPx)) * 180 / Math.PI * q;
+        if (left.length > 1) g += `<path class="beam-poly bad" d="${beamPath(left, null, jag)}"/>`;
+        g += `<g transform="translate(0 ${(14 * q).toFixed(1)}) rotate(${a.toFixed(2)} ${xbPx} ${ybPx})"><path class="beam-poly bad" d="${beamPath(right, jag, null)}"/></g>`;
+      }
+      if (p < 0.22) g += `<circle class="flash" cx="${xbPx}" cy="${ybPx}" r="${(6 + 40 * p).toFixed(1)}" opacity="${(0.5 - 2 * p).toFixed(2)}"/>`;
+      if (p > 0.22 && p < 1) {
+        const tt = (p - 0.22) / 0.78;
+        for (let i = 0; i < 12; i++) {
+          const dx = (rnd(i, 1) - 0.5) * 110 * tt, dy = -35 * rnd(i, 2) * tt + 170 * tt * tt, s = 2 + 3.5 * rnd(i, 3);
+          g += `<rect class="debris" x="${(xbPx + dx - s / 2).toFixed(1)}" y="${(ybPx + dy - s / 2).toFixed(1)}" width="${s.toFixed(1)}" height="${s.toFixed(1)}" ` +
+            `transform="rotate(${(720 * tt * rnd(i, 4)).toFixed(0)} ${(xbPx + dx).toFixed(1)} ${(ybPx + dy).toFixed(1)})" opacity="${(1 - tt).toFixed(2)}"/>`;
+        }
+      }
+    }
+
+    // uniform loads, stacked in lanes (draggable; handles stretch the ends)
+    udls.forEach((u, k) => {
+      const yb = top - k * laneH, yt = yb - 22;
+      const a = sx(u.x1), b = sx(u.x2);
+      const nA = Math.max(2, Math.round((b - a) / 26) + 1);
+      let s = `<line x1="${a}" y1="${u.w >= 0 ? yt : yb}" x2="${b}" y2="${u.w >= 0 ? yt : yb}"/>`;
+      for (let j = 0; j < nA; j++) {
+        const x = a + (b - a) * j / (nA - 1);
+        s += u.w >= 0 ? arrow(x, yt, yb, 6) : arrow(x, yb, yt, 6);
+      }
+      const txt = `${u.self ? 'self-wt ' : ''}${fx(u.w, 3)} k/ft ${u.tag}`;
+      s += `<text x="${(a + b) / 2}" y="${yt - 4}" text-anchor="middle">${txt}</text>`;
+      if (u.self) { g += `<g class="ld-${u.tag}">${s}</g>`; return; }
+      g += `<g class="ld-${u.tag} drag" data-load="${u.i}" data-part="body"><rect class="hit" x="${a}" y="${yt - 18}" width="${Math.max(4, b - a)}" height="${yb - yt + 20}"/>${s}</g>`;
+      g += `<g class="drag" data-load="${u.i}" data-part="x1"><circle class="handle" cx="${a}" cy="${yt}" r="5"/><rect class="hit" x="${a - 10}" y="${yt - 10}" width="20" height="20"/></g>`;
+      g += `<g class="drag" data-load="${u.i}" data-part="x2"><circle class="handle" cx="${b}" cy="${yt}" r="5"/><rect class="hit" x="${b - 10}" y="${yt - 10}" width="20" height="20"/></g>`;
+    });
+
+    // point loads (draggable; arrow tips follow the deflected beam)
+    const ptTop = top - udls.length * laneH - 32;
+    pts.forEach(pl => {
+      const x = sx(pl.x);
+      const tip = strength ? top : yBeam(pl.x) - 5;
+      const anchor = x < X0 + 30 ? 'start' : x > X1 - 30 ? 'end' : 'middle';
+      let s = pl.P >= 0 ? arrow(x, ptTop, tip, 8) : arrow(x, tip, ptTop, 8);
+      s += `<text x="${x}" y="${ptTop - 5}" text-anchor="${anchor}">${fx(pl.P, 2)} k ${pl.tag}</text>`;
+      g += `<g class="ld-${pl.tag} drag" data-load="${pl.i}" data-part="x"><rect class="hit" x="${x - 12}" y="${ptTop - 18}" width="24" height="${tip - ptTop + 20}"/>${s}</g>`;
+    });
+
+    // reactions
+    const rb = beamY + 75, rt = beamY + 34;
+    const react = (x, R, extra, anchor = 'middle') => {
+      let s = R >= 0 ? arrow(x, rb, rt, 8) : arrow(x, rt, rb, 8);
+      s += `<text x="${x}" y="${rb + 15}" text-anchor="${anchor}">R = ${fx(R, 2)} k${extra || ''}</text>`;
+      return `<g class="react">${s}</g>`;
+    };
+    if (cfg.support === 'ss') { g += react(X0, t.R1, '', 'start'); g += react(X1, t.R2, '', 'end'); }
+    else g += react(X0 + 22, t.R1, `, M = ${fx(Math.abs(t.M0), 2)} k-ft`, 'start');
+
+    // failure label
+    if (fs) {
+      const lx = clamp(sx(fs.x), X0 + 150, X1 - 150);
+      const msg = fs.kind === 'deflection'
+        ? `Too flexible: ${shortLabel(fs.check.label)} ${fx(fs.check.demand, 3)} in > ${fx(fs.check.cap, 3)} in`
+        : `FAILED in ${fs.kind} at x = ${fx(fs.x, 2)} ft (ratio ${fx(fs.ratio, 2)})`;
+      g += `<text class="failtxt" x="${lx}" y="${beamY + 140}" text-anchor="middle" opacity="${Math.min(1, p * 3).toFixed(2)}">${esc(msg)}</text>`;
+    }
+
+    // dimension
+    const dy = H - 10;
+    g += `<g class="dim"><line x1="${X0}" y1="${dy}" x2="${X1}" y2="${dy}"/>` +
+      `<line x1="${X0}" y1="${dy - 5}" x2="${X0}" y2="${dy + 5}"/><line x1="${X1}" y1="${dy - 5}" x2="${X1}" y2="${dy + 5}"/>` +
+      `<text x="${(X0 + X1) / 2}" y="${dy - 5}" text-anchor="middle">L = ${fx(L, 2)} ft</text></g>`;
+
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    svg.setAttribute('height', H);
+    svg.innerHTML = g + '<g class="cur"></g>';
+    $('exag-note').textContent = `Deflected shape, drawn ×${factor >= 10 ? Math.round(factor) : fx(factor, 1)}${clipped ? ' (clipped)' : ''}`;
+    $('btn-replay').classList.toggle('hidden', !strength);
+
+    plots.sketch = {
+      svg, sx, X0, X1,
+      snaps: snapTargets(res),
+      cursor: x => {
+        const X = sx(x), d = interp(t.xs, t.D, x);
+        let c = `<line class="cx" x1="${X}" y1="30" x2="${X}" y2="${H - 26}"/>`;
+        if (!strength) c += `<circle class="cdot c-beam" cx="${X}" cy="${yBeam(x)}" r="4"/>`;
+        return c + tip(W, X, 4, `x = ${fx(x, 2)} ft · Δ = ${fx(Math.abs(d), 3)} in ${d >= 0 ? '↓' : '↑'}`);
+      },
+    };
+    renderCursor('sketch');
+
+    cancelAnimationFrame(fail.raf);
+    if (strength && p < 1) fail.raf = requestAnimationFrame(() => { if (last) drawSketch(last); });
+  }
+
+  function tip(W, X, y, text) {
+    const tw = text.length * 6.7 + 14;
+    let bx = X + 10;
+    if (bx + tw > W - 2) bx = X - 10 - tw;
+    if (bx < 2) bx = 2;
+    return `<rect class="tipbg" x="${bx.toFixed(1)}" y="${y.toFixed(1)}" width="${tw.toFixed(1)}" height="20" rx="4"/>` +
+      `<text x="${(bx + 7).toFixed(1)}" y="${(y + 14).toFixed(1)}">${esc(text)}</text>`;
+  }
+
+  function snapTargets(res) {
+    const t = res.total, s = [0, cfg.L, t.Vmax.x, t.Vmin.x, t.Mmax.x, t.Mmin.x, t.dX];
+    for (const l of res.loads) { if (l.type === 'point') s.push(l.x); else s.push(l.x1, l.x2); }
+    return s;
+  }
+
+  /** Generic diagram. series: [{pts:[[x,v]], cls, fill}], labels: [{x, v, text}], probe: x -> {dots:[{v,cls}], text} */
+  function drawDiagram(svg, { series, yLabel, labels, probe }, res) {
+    const W = Math.max(320, svg.clientWidth || 800), H = 200;
+    const pL = PAD_L, pR = PAD_R, pT = 26, pB = 30, L = cfg.L;
+    let lo = 0, hi = 0;
+    for (const s of series) for (const p of s.pts) { if (p[1] < lo) lo = p[1]; if (p[1] > hi) hi = p[1]; }
+    if (hi - lo < 1e-12) { hi = 1; lo = -1; }
+    const pad = (hi - lo) * 0.2; hi += pad; lo -= pad;
+    const sx = x => pL + (x / L) * (W - pL - pR);
+    const sy = v => pT + (hi - v) / (hi - lo) * (H - pT - pB);
+    let g = '';
+    for (let i = 0; i <= 4; i++) {
+      const x = L * i / 4, X = sx(x);
+      g += `<line class="grid" x1="${X}" y1="${pT - 10}" x2="${X}" y2="${H - pB}"/>`;
+      g += `<text class="tick" x="${X}" y="${H - 10}" text-anchor="${i === 0 ? 'start' : i === 4 ? 'end' : 'middle'}">${fx(x, 1)}${i === 4 ? ' ft' : ''}</text>`;
+    }
+    g += `<line class="axis" x1="${pL}" y1="${sy(0)}" x2="${W - pR}" y2="${sy(0)}"/>`;
+    g += `<text class="tick" x="${pL - 6}" y="${sy(0) + 4}" text-anchor="end">0</text>`;
+    g += `<text class="ylab" transform="translate(16 ${(pT + H - pB) / 2}) rotate(-90)" text-anchor="middle">${yLabel}</text>`;
+    for (const s of series) {
+      const line = s.pts.map((p, i) => `${i ? 'L' : 'M'}${sx(p[0]).toFixed(1)},${sy(p[1]).toFixed(1)}`).join('');
+      g += `<g class="${s.cls}">`;
+      if (s.fill) {
+        const p0 = s.pts[0], pn = s.pts[s.pts.length - 1];
+        g += `<path class="area" d="M${sx(p0[0]).toFixed(1)},${sy(0).toFixed(1)}${line.replace(/^M/, 'L')}L${sx(pn[0]).toFixed(1)},${sy(0).toFixed(1)}Z"/>`;
+      }
+      g += `<path class="ln" d="${line}"/></g>`;
+    }
+    for (const lb of labels) {
+      const X = sx(lb.x), Y = sy(lb.v);
+      const anchor = X < pL + 90 ? 'start' : X > W - pR - 90 ? 'end' : 'middle';
+      const ty = lb.v >= 0 ? Math.max(14, Y - 9) : Math.min(H - pB - 4, Y + 19);
+      const dxT = anchor === 'start' ? 6 : anchor === 'end' ? -6 : 0;
+      g += `<circle class="mark" cx="${X}" cy="${Y}" r="3.5"/>`;
+      g += `<text class="lbl" x="${X + dxT}" y="${ty}" text-anchor="${anchor}">${esc(lb.text)}</text>`;
+    }
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    svg.setAttribute('height', H);
+    svg.innerHTML = g + '<g class="cur"></g>';
+    plots[svg.id] = {
+      svg, sx, X0: pL, X1: W - pR,
+      snaps: snapTargets(res),
+      cursor: x => {
+        const X = sx(x), pr = probe(x);
+        let c = `<line class="cx" x1="${X}" y1="${pT - 10}" x2="${X}" y2="${H - pB}"/>`;
+        pr.dots.forEach(d => { c += `<circle class="cdot ${d.cls}" cx="${X}" cy="${sy(d.v).toFixed(1)}" r="4"/>`; });
+        // Tooltip goes in the half of the plot away from the curve, clear of the max labels.
+        const ty = sy(pr.dots[0].v) > (pT + H - pB) / 2 ? 2 : H - pB - 24;
+        return c + tip(W, X, ty, `x = ${fx(x, 2)} ft · ${pr.text}`);
+      },
+    };
+  }
+
+  function drawDiagrams(res) {
+    const t = res.total, eps = 1e-9;
+    const scaleV = Math.max(t.Vabs, eps), scaleM = Math.max(t.Mabs, eps);
+    const vLabels = [];
+    if (t.Vmax.v > scaleV * 1e-6) vLabels.push({ x: t.Vmax.x, v: t.Vmax.v, text: `${fx(t.Vmax.v, 2)} k at ${fx(t.Vmax.x, 2)} ft` });
+    if (t.Vmin.v < -scaleV * 1e-6) vLabels.push({ x: t.Vmin.x, v: t.Vmin.v, text: `${fx(t.Vmin.v, 2)} k at ${fx(t.Vmin.x, 2)} ft` });
+    drawDiagram($('d-shear'), {
+      series: [{ pts: t.shearPts, cls: 's-shear', fill: true }], yLabel: 'V (kips)', labels: vLabels,
+      probe: x => { const v = shearAt(t.shearPts, x); return { dots: [{ v, cls: 'c-shear' }], text: `V = ${fx(v, 2)} k` }; },
+    }, res);
+
+    const mLabels = [];
+    if (t.Mmax.v > scaleM * 1e-6) mLabels.push({ x: t.Mmax.x, v: t.Mmax.v, text: `${fx(t.Mmax.v, 2)} k-ft at ${fx(t.Mmax.x, 2)} ft` });
+    if (t.Mmin.v < -scaleM * 1e-6) mLabels.push({ x: t.Mmin.x, v: t.Mmin.v, text: `${fx(t.Mmin.v, 2)} k-ft at ${fx(t.Mmin.x, 2)} ft` });
+    drawDiagram($('d-moment'), {
+      series: [{ pts: t.xs.map((x, i) => [x, t.M[i]]), cls: 's-moment', fill: true }], yLabel: 'M (kip-ft)', labels: mLabels,
+      probe: x => { const v = interp(t.xs, t.M, x); return { dots: [{ v, cls: 'c-moment' }], text: `M = ${fx(v, 2)} k-ft` }; },
+    }, res);
+
+    const up = d => -d;  // plot downward deflection below the axis
+    const dLabels = [];
+    if (Math.abs(t.dMax) > 1e-9) dLabels.push({ x: t.dX, v: up(t.dMax), text: `Δ = ${fx(Math.abs(t.dMax), 3)} in ${t.dMax >= 0 ? '↓' : '↑'} at ${fx(t.dX, 2)} ft` });
+    const series = [{ pts: t.xs.map((x, i) => [x, up(t.D[i])]), cls: 's-defl', fill: true }];
+    const both = res.loads.some(l => l.tag === 'L') && res.loads.some(l => l.tag === 'D');
+    if (both) series.push({ pts: res.live.xs.map((x, i) => [x, up(res.live.D[i])]), cls: 's-live' });
+    drawDiagram($('d-defl'), {
+      series, yLabel: 'Δ (in)', labels: dLabels,
+      probe: x => {
+        const d = interp(t.xs, t.D, x), dl = interp(res.live.xs, res.live.D, x);
+        const dots = [{ v: up(d), cls: 'c-defl' }];
+        if (both) dots.push({ v: up(dl), cls: 'c-live' });
+        return { dots, text: `Δ = ${fx(Math.abs(d), 3)} in ${d >= 0 ? '↓' : '↑'}${both ? ` (live ${fx(Math.abs(dl), 3)})` : ''}` };
+      },
+    }, res);
+  }
+
+  /* ---------- probe ---------- */
+  const curX = () => {
+    if (!last) return 0;
+    const x = view.hoverX ?? view.pinX ?? last.total.MabsX;
+    return clamp(x, 0, cfg.L);
+  };
+  function renderCursor(id) {
+    const p = plots[id];
+    if (!p || !last) return;
+    const g = p.svg.querySelector('g.cur');
+    if (!g) return;
+    g.classList.toggle('pinned', view.hoverX === null);
+    g.innerHTML = p.cursor(curX());
+  }
+  function drawCursors() {
+    if (!last) return;
+    Object.keys(plots).forEach(renderCursor);
+    renderSection(last, curX());
+  }
+  function svgPos(svg, e) {
+    const r = svg.getBoundingClientRect(), vb = svg.viewBox.baseVal;
+    return (e.clientX - r.left) * (vb && vb.width ? vb.width / r.width : 1);
+  }
+  function xFromEvent(id, e, snap = true) {
+    const p = plots[id], xv = svgPos(p.svg, e);
+    let x = clamp((xv - p.X0) / (p.X1 - p.X0) * cfg.L, 0, cfg.L);
+    if (snap) {
+      let best = 7;
+      for (const s of p.snaps) { const d = Math.abs(p.sx(s) - xv); if (d < best) { best = d; x = s; } }
+    }
+    return x;
+  }
+
+  /* ---------- cross-section stresses at the probe ---------- */
+  function renderSection(res, x) {
+    const svg = $('xsec'), m = res.member, t = res.total;
+    const steel = m.material === 'steel';
+    const V = shearAt(t.shearPts, x), M = interp(t.xs, t.M, x);
+    const Dt = interp(t.xs, t.D, x), Dl = interp(res.live.xs, res.live.D, x);
+    const u = m.bending.unit, dec = steel ? 2 : 0;
+    const fbs = steel ? M * 12 / m.S : M * 12000 / m.S;         // signed, sagging positive
+    const Fb = m.bending.cap;
+    const fv = steel ? Math.abs(V) / (m.props.d * m.props.tw) : 1.5 * Math.abs(V) * 1000 / m.A;
+    const Fv = steel ? m.shear.cap / (m.props.d * m.props.tw) : m.shear.cap;
+    const rb = Math.abs(fbs) / Fb, rv = fv / Fv;
+
+    const W = Math.max(320, svg.clientWidth || 800), H = 238, col = W / 3;
+    const y0 = 40, h = 140, y1 = y0 + h, ym = y0 + h / 2;
+    let g = '';
+    g += `<text class="ctitle" x="${col / 2}" y="18" text-anchor="middle">Section${steel ? ' (schematic)' : ' (to scale)'}</text>`;
+    g += `<text class="ctitle" x="${col * 1.5}" y="18" text-anchor="middle">Bending stress</text>`;
+    g += `<text class="ctitle" x="${col * 2.5}" y="18" text-anchor="middle">${steel ? 'Web shear (average)' : 'Shear stress'}</text>`;
+    g += `<line class="na" x1="8" y1="${ym}" x2="${W - 8}" y2="${ym}"/><text class="tick" x="8" y="${ym - 5}">N.A.</text>`;
+
+    // 1. section
+    const cx = col / 2;
+    if (steel) {
+      const bf = Math.min(col - 50, h * 0.6), tf = 11, tw = 5;
+      const l = cx - bf / 2, r = cx + bf / 2;
+      g += `<path class="shape" d="M${l},${y0}H${r}V${y0 + tf}H${cx + tw / 2}V${y1 - tf}H${r}V${y1}H${l}V${y1 - tf}H${cx - tw / 2}V${y0 + tf}H${l}Z"/>`;
+      g += `<text class="tick" x="${cx}" y="${y1 + 18}" text-anchor="middle">${esc(m.name)}: d = ${m.props.d} in, tw = ${m.props.tw} in</text>`;
+    } else {
+      const bw = Math.max(8, h * m.props.b / m.props.d);
+      g += `<rect class="shape" x="${cx - bw / 2}" y="${y0}" width="${bw}" height="${h}"/>`;
+      g += `<text class="tick" x="${cx}" y="${y1 + 18}" text-anchor="middle">${esc(m.name)}: ${m.props.b} × ${m.props.d} in</text>`;
+    }
+
+    // 2. bending: linear, compression drawn left, tension right; dashed lines = allowable
+    const cx2 = col * 1.5, half = col / 2 - 10, a = half * 0.62;
+    const px = v => clamp(v / Fb * a, -half, half);
+    const sTop = -fbs, sBot = fbs;   // tension positive
+    const cls = s => (Math.abs(s) > Fb * (1 + 1e-9) ? 'st-over' : s < 0 ? 'st-c' : 'st-t');
+    if (Math.abs(fbs) > 1e-9) {
+      g += `<polygon class="${cls(sTop)}" points="${cx2},${y0} ${cx2 + px(sTop)},${y0} ${cx2},${ym}"/>`;
+      g += `<polygon class="${cls(sBot)}" points="${cx2},${ym} ${cx2 + px(sBot)},${y1} ${cx2},${y1}"/>`;
+    }
+    g += `<line class="axis" x1="${cx2}" y1="${y0 - 6}" x2="${cx2}" y2="${y1 + 6}"/>`;
+    g += `<line class="allow" x1="${cx2 - a}" y1="${y0 - 6}" x2="${cx2 - a}" y2="${y1 + 6}"/><line class="allow" x1="${cx2 + a}" y1="${y0 - 6}" x2="${cx2 + a}" y2="${y1 + 6}"/>`;
+    const sLab = (s, y) => {
+      const X = cx2 + px(s), anchor = s < 0 ? 'end' : 'start';
+      return `<text class="lbl" x="${X + (s < 0 ? -4 : 4)}" y="${y}" text-anchor="${anchor}">${s < 0 ? 'C' : 'T'} ${fx(Math.abs(s), dec)}</text>`;
+    };
+    if (Math.abs(fbs) > 1e-9) { g += sLab(sTop, y0 + 12); g += sLab(sBot, y1 - 4); }
+    g += `<text class="tick" x="${cx2}" y="${y1 + 18}" text-anchor="middle">${u}; dashed = ±${steel ? 'Fb' : "Fb'"} ${fx(Fb, dec)}</text>`;
+
+    // 3. shear: uniform over the web (steel) or parabolic (rectangular lumber)
+    const cx3 = col * 2 + 16, a3 = (col - 40) * 0.62, max3 = col - 24;
+    const pv = v => Math.min(v / Fv * a3, max3);
+    const vcls = rv > 1 + 1e-9 ? 'st-over' : 'st-v';
+    if (fv > 1e-9) {
+      if (steel) g += `<rect class="${vcls}" x="${cx3}" y="${y0 + 11}" width="${pv(fv)}" height="${h - 22}"/>`;
+      else {
+        let d = `M${cx3},${y0}`;
+        for (let i = 0; i <= 30; i++) { const e = i / 30, y = y0 + e * h; d += `L${(cx3 + pv(fv * (1 - (2 * e - 1) ** 2))).toFixed(1)},${y.toFixed(1)}`; }
+        g += `<path class="${vcls}" d="${d}Z"/>`;
+      }
+      const lx = cx3 + pv(fv) + 4, right = lx + 60 < W;
+      g += `<text class="lbl" x="${right ? lx : cx3 + pv(fv) - 4}" y="${ym + 16}" text-anchor="${right ? 'start' : 'end'}">${fx(fv, steel ? 2 : 1)}</text>`;
+    }
+    g += `<line class="axis" x1="${cx3}" y1="${y0 - 6}" x2="${cx3}" y2="${y1 + 6}"/>`;
+    g += `<line class="allow" x1="${cx3 + a3}" y1="${y0 - 6}" x2="${cx3 + a3}" y2="${y1 + 6}"/>`;
+    g += `<text class="tick" x="${col * 2.5}" y="${y1 + 18}" text-anchor="middle">${u}; dashed = ${steel ? '0.6Fy/1.5' : "Fv'"} ${fx(Fv, steel ? 1 : 0)}</text>`;
+    g += `<text class="tick" x="${W / 2}" y="${H - 6}" text-anchor="middle">${M >= 0 ? 'Sagging: top in compression' : 'Hogging: top in tension'} · probe at x = ${fx(x, 2)} ft</text>`;
+
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    svg.setAttribute('height', H);
+    svg.innerHTML = g;
+
+    $('xsec-sub').textContent = `(x = ${fx(x, 2)} ft${view.hoverX === null ? ', pinned' : ''})`;
+    const cell = (k, v, over) => `<div><span>${k}</span><b class="${over ? 'over' : ''}">${v}</b></div>`;
+    $('xsec-read').innerHTML =
+      cell('Position x', `${fx(x, 2)} ft`) +
+      cell('Shear V', `${fx(V, 2)} kips`) +
+      cell('Moment M', `${fx(M, 2)} kip-ft`) +
+      cell(`fb / ${steel ? 'Fb' : "Fb'"}`, `${fx(Math.abs(fbs), dec)} ${u} (${fx(rb, 2)})`, rb > 1) +
+      cell(`fv / ${steel ? 'Fv' : "Fv'"}`, `${fx(fv, steel ? 2 : 1)} ${u} (${fx(rv, 2)})`, rv > 1) +
+      cell('Δ total', `${fx(Math.abs(Dt), 3)} in ${Dt >= 0 ? '↓' : '↑'}`) +
+      cell('Δ live', `${fx(Math.abs(Dl), 3)} in ${Dl >= 0 ? '↓' : '↑'}`);
+  }
+
+  /* ---------- section comparison ---------- */
+  function renderCompare() {
+    const list = cfg.material === 'steel' ? W_SHAPES : LUMBER;
+    const names = { bending: 'Bending', shear: 'Shear', live: 'Δ live', total: 'Δ total' };
+    const rows = list.map(s => {
+      const r = design({ ...cfg, section: s.name });
+      if (r.errors.length) return null;
+      let gk = 'bending';
+      for (const k of Object.keys(names)) if (r.checks[k].ratio > r.checks[gk].ratio) gk = k;
+      return { name: s.name, wt: r.member.wSelf * 1000, ratio: r.checks[gk].ratio, gov: names[gk],
+               pass: Object.keys(names).every(k => r.checks[k].pass) };
+    }).filter(Boolean).sort((a, b) => a.wt - b.wt);
+    const best = rows.find(r => r.pass);
+    $('compare').innerHTML = rows.map(r => `
+      <button type="button" class="cmp-row${r.name === cfg.section ? ' current' : ''}${r.pass ? '' : ' fail'}" data-sec="${r.name}"
+        aria-pressed="${r.name === cfg.section}" title="${r.name}: governing ${r.gov} ratio ${fx(r.ratio, 2)}">
+        <span class="nm">${r.name}</span>
+        <span class="wt">${fx(r.wt, 1)} lb/ft</span>
+        <span class="cbar"><i style="width:${clamp(r.ratio / 2, 0, 1) * 100}%"></i><b></b></span>
+        <span class="rt">${Number.isFinite(r.ratio) ? fx(r.ratio, 2) : '∞'}</span>
+        <span class="gv">${r.gov}${r === best ? '<span class="tag">lightest OK</span>' : ''}</span>
+      </button>`).join('') || '<p class="empty">No sections to compare.</p>';
+  }
+
+  function markInvalid(errors) {
+    document.querySelectorAll('.invalid').forEach(el => el.classList.remove('invalid'));
+    for (const e of errors) {
+      if (e.field === 'L') $('in-L').classList.add('invalid');
+      else if (e.field === 'section') $('in-section').classList.add('invalid');
+      else if (e.field) {
+        const [i, k] = e.field.split('-');
+        const el = document.querySelector(`#loads [data-i="${i}"][data-k="${k}"]`);
+        if (el) el.classList.add('invalid');
+      }
+    }
+  }
+
+  function startFail() {
+    fail.start = reduceMotion ? -Infinity : performance.now();
+    if (reduceMotion) return;
+    const card = $('sketch-card');
+    card.classList.remove('shake');
+    void card.offsetWidth;            // restart the CSS animation
+    card.classList.add('shake');
+  }
+
+  function update() {
+    const res = design(cfg);
+    renderProps(res.member);
+    markInvalid(res.errors);
+    $('support-note').textContent = cfg.support === 'ss'
+      ? 'Pin at x = 0, roller at x = L. Deflection limits use L.'
+      : 'Fixed at x = 0, free at x = L. Deflection limits use 2L.';
+    if (res.errors.length) {
+      $('errors').innerHTML = `<strong>Fix these inputs to see results:</strong><ul>${res.errors.map(e => `<li>${esc(e.msg)}</li>`).join('')}</ul>`;
+      $('errors').classList.remove('hidden');
+      $('results').classList.add('hidden');
+      $('reserve').textContent = '';
+      last = null;
+      return;
+    }
+    $('errors').classList.add('hidden');
+    $('results').classList.remove('hidden');
+    last = res;
+    const fs = failState(res), strength = !!fs && fs.kind !== 'deflection';
+    if (strength && !fail.wasStrength) startFail();
+    fail.wasStrength = strength;
+    renderFactor();
+    renderChecks(res);
+    drawSketch(res);
+    drawDiagrams(res);
+    renderCompare();
+    drawCursors();
+  }
+
+  function redraw() { if (last) { drawSketch(last); drawDiagrams(last); drawCursors(); } }
+
+  function renderValidation() {
+    const results = runValidation();
+    const nOk = results.filter(r => r.ok).length;
+    $('valid-summary').innerHTML = `Validation cases: <span class="${nOk === results.length ? 'ok' : 'bad'}">${nOk} of ${results.length} pass</span>`;
+    let h = '<thead><tr><th>Quantity</th><th class="num">Hand calc</th><th class="num">App</th><th class="num">Diff</th><th></th></tr></thead><tbody>';
+    results.forEach((r, ci) => {
+      h += `<tr class="case"><td colspan="4">${esc(r.name)}</td><td><button type="button" data-case="${ci}">Load</button></td></tr>`;
+      for (const row of r.rows) {
+        h += `<tr><td>${esc(row.label)}</td><td class="num">${row.exp}</td><td class="num">${Number.isFinite(row.got) ? row.got.toPrecision(4) : '—'}</td>` +
+          `<td class="num">${Number.isFinite(row.diff) ? (row.diff * 100).toFixed(2) + '%' : '—'}</td>` +
+          `<td class="${row.ok ? 'ok' : 'bad'}">${row.ok ? '✓' : '✗'}</td></tr>`;
+      }
+    });
+    $('valid-table').innerHTML = h + '</tbody>';
+  }
+
+  /* ---------- events: inputs ---------- */
+  document.querySelectorAll('input[name=support]').forEach(r => r.addEventListener('change', () => { cfg.support = r.value; update(); }));
+  document.querySelectorAll('input[name=material]').forEach(r => r.addEventListener('change', () => {
+    cfg.material = r.value;
+    cfg.section = r.value === 'steel' ? 'W12x26' : '2x10';
+    fillSections(); update();
+  }));
+  $('in-L').addEventListener('input', e => { cfg.L = parseFloat(e.target.value); update(); });
+  $('in-section').addEventListener('change', e => { cfg.section = e.target.value; update(); });
+  $('in-CD').addEventListener('change', e => { cfg.CD = parseFloat(e.target.value); update(); });
+  $('in-rep').addEventListener('change', e => { cfg.repetitive = e.target.checked; update(); });
+  $('in-self').addEventListener('change', e => { cfg.selfWeight = e.target.checked; update(); });
+  $('in-factor').addEventListener('input', e => { cfg.factor = parseFloat(e.target.value); update(); });
+  $('in-exag').addEventListener('change', e => { view.exag = e.target.value; redraw(); });
+  $('btn-replay').addEventListener('click', () => { startFail(); if (last) drawSketch(last); });
+
+  const onLoadEdit = e => {
+    const el = e.target, i = el.dataset.i, k = el.dataset.k;
+    if (i === undefined || !k) return;
+    if (k === 'tag') {
+      cfg.loads[i].tag = el.value;
+      el.closest('.load').className = `load tag-${el.value}`;
+    } else cfg.loads[i][k] = parseFloat(el.value);
+    update();
+  };
+  $('loads').addEventListener('input', onLoadEdit);
+  $('loads').addEventListener('change', e => { if (e.target.dataset.k === 'tag') onLoadEdit(e); });
+  $('loads').addEventListener('click', e => {
+    const d = e.target.dataset.del;
+    if (d === undefined) return;
+    cfg.loads.splice(Number(d), 1);
+    renderLoads(); update();
+  });
+  const spanOr = v => (Number.isFinite(cfg.L) && cfg.L > 0 ? cfg.L : v);
+  $('add-point').addEventListener('click', () => {
+    const L = spanOr(10);
+    cfg.loads.push({ type: 'point', P: 5, x: +(cfg.support === 'ss' ? L / 2 : L).toFixed(2), tag: 'L' });
+    renderLoads(); update();
+  });
+  $('add-udl').addEventListener('click', () => {
+    cfg.loads.push({ type: 'udl', w: 0.5, x1: 0, x2: spanOr(10), tag: 'D' });
+    renderLoads(); update();
+  });
+  $('btn-reset').addEventListener('click', () => { cfg = defaultCfg(); view.pinX = null; syncInputs(); update(); });
+  $('btn-print').addEventListener('click', () => window.print());
+  $('valid-table').addEventListener('click', e => {
+    const ci = e.target.dataset.case;
+    if (ci === undefined) return;
+    cfg = { factor: 1, ...structuredClone(VALIDATION[Number(ci)].cfg) };
+    view.pinX = null;
+    syncInputs(); update();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+  $('compare').addEventListener('click', e => {
+    const b = e.target.closest('[data-sec]');
+    if (!b) return;
+    cfg.section = b.dataset.sec;
+    $('in-section').value = cfg.section;
+    update();
+  });
+
+  /* ---------- events: probe and dragging ---------- */
+  const roundStep = v => { const s = cfg.L <= 5 ? 0.05 : 0.25; return +(Math.round(v / s) * s).toFixed(3); };
+  function setLoadField(i, k, v) {
+    cfg.loads[i][k] = v;
+    const el = document.querySelector(`#loads [data-i="${i}"][data-k="${k}"]`);
+    if (el) el.value = v;
+  }
+  function doDrag(e) {
+    const x = xFromEvent('sketch', e, false), L = cfg.L, o = drag.orig, i = drag.i;
+    const delta = x - drag.startX;
+    if (drag.part === 'x') setLoadField(i, 'x', clamp(roundStep(o.x + delta), 0, L));
+    else if (drag.part === 'body') {
+      const len = o.x2 - o.x1, a = clamp(roundStep(o.x1 + delta), 0, L - len);
+      setLoadField(i, 'x1', +a.toFixed(3)); setLoadField(i, 'x2', +(a + len).toFixed(3));
+    } else if (drag.part === 'x1') setLoadField(i, 'x1', clamp(roundStep(x), 0, o.x2 - 0.05));
+    else setLoadField(i, 'x2', clamp(roundStep(x), o.x1 + 0.05, L));
+    view.hoverX = drag.part === 'x' ? cfg.loads[i].x : x;
+    update();
+  }
+
+  ['sketch', 'd-shear', 'd-moment', 'd-defl'].forEach(id => {
+    const svg = $(id);
+    svg.addEventListener('pointerdown', e => {
+      if (!last || !plots[id]) return;
+      const hit = id === 'sketch' && e.target.closest('[data-load]');
+      if (hit) {
+        const i = Number(hit.dataset.load);
+        drag = { i, part: hit.dataset.part, startX: xFromEvent(id, e, false), orig: { ...cfg.loads[i] } };
+        svg.setPointerCapture(e.pointerId);
+        svg.classList.add('dragging');
+        e.preventDefault();
+        return;
+      }
+      view.pinX = xFromEvent(id, e);
+      view.hoverX = e.pointerType === 'mouse' ? view.pinX : null;
+      drawCursors();
+    });
+    svg.addEventListener('pointermove', e => {
+      if (!last || !plots[id]) return;
+      if (drag && id === 'sketch') { doDrag(e); return; }
+      if (e.pointerType !== 'mouse') { if (e.buttons) { view.pinX = xFromEvent(id, e); drawCursors(); } return; }
+      view.hoverX = xFromEvent(id, e);
+      drawCursors();
+    });
+    const endDrag = e => {
+      if (drag && id === 'sketch') {
+        drag = null;
+        svg.classList.remove('dragging');
+        if (svg.hasPointerCapture(e.pointerId)) svg.releasePointerCapture(e.pointerId);
+      }
+    };
+    svg.addEventListener('pointerup', endDrag);
+    svg.addEventListener('pointercancel', endDrag);
+    svg.addEventListener('pointerleave', () => { if (drag) return; view.hoverX = null; drawCursors(); });
+    svg.addEventListener('keydown', e => {
+      if (!last) return;
+      const L = cfg.L, stepX = e.shiftKey ? L / 20 : L / 100;
+      let x = curX();
+      if (e.key === 'ArrowLeft') x -= stepX;
+      else if (e.key === 'ArrowRight') x += stepX;
+      else if (e.key === 'Home') x = 0;
+      else if (e.key === 'End') x = L;
+      else return;
+      e.preventDefault();
+      view.hoverX = null;
+      view.pinX = clamp(x, 0, L);
+      drawCursors();
+    });
+  });
+
+  let rt;
+  window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(redraw, 80); });
+  window.addEventListener('beforeprint', redraw);
+
+  syncInputs();
+  update();
+  renderValidation();
+})();
+</script>
+</body>
+</html>
