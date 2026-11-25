@@ -31,3 +31,7 @@
 - **Asked:** Write a short README.md that says what the app does, which packages to install, and the command that starts it.
   **Changed:** Added `README.md`. It covers what the app does, what to install (Python 3.10+ with Tkinter and nothing else, with notes for python.org, Homebrew, and Linux), the start command (`python beam_app.py`, `python3` on macOS), and the test command.
   **Worked:** Yes. The commands in it match how the app and tests were run in this project.
+
+- **Asked:** Make a .zip of the beam_desktop folder and give the GitHub repository address for the submission comments.
+  **Changed:** Created `beam_desktop.zip` in the class folder (next to `beam_desktop`), leaving out `__pycache__` and `.DS_Store`; it includes the `.git` history. No project files changed except this entry. The repository is https://github.com/Xan-Cannon/beam_desktop.
+  **Worked:** Yes. `main` on GitHub matched the local `main` (commit 0aedd94) before this entry, and the repository page is public (HTTP 200). This entry's commit is local only until it is pushed.
