@@ -7,3 +7,7 @@
 - **Asked:** Make a top-level `AGENTS.md` with only two rules (log each request in `prompts.md`, and commit after each request), then commit. Build nothing else.
   **Changed:** Replaced `AGENTS.md` with the two rules. This removed the earlier note that `index.html` is the behavior reference. Added this entry.
   **Worked:** Yes. Committed.
+
+- **Asked:** Update `spec.md` to describe a Python desktop app using Tkinter. Build nothing.
+  **Changed:** Rewrote `spec.md` for a Tkinter app. Added Platform (Python 3.10+, standard library only, plots drawn on a Tkinter Canvas), Files (`beam_app.py`, `beam_calc.py` with no Tkinter, `sections.py`, `test_validation.py`), and Window layout sections. Made `index.html` the behavior reference. Replaced web-only features with desktop ones: Treeview load tables, mouse and arrow-key probe, an "Animate failures" checkbox in place of the OS reduced-motion setting, and Save Report (.txt) and Save Diagrams (.eps) in place of the print view. Kept the assumptions, section tables, calculations, and the six validation cases the same. Dropped the `01_data/` and `02_validation/` folders and moved dark mode to out of scope.
+  **Worked:** Yes (spec only, no code).

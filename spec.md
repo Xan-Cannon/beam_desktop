@@ -1,9 +1,36 @@
-# Beam Designer
+# Beam Designer (Desktop)
 
 ## Purpose
-Shear, moment, and deflection diagrams for a single-span beam, with a check of
-whether a steel W-shape or lumber member is strong enough (bending and shear)
-and stiff enough (deflection).
+A Python desktop app that draws shear, moment, and deflection diagrams for a
+single-span beam, and checks whether a steel W-shape or lumber member is strong
+enough (bending and shear) and stiff enough (deflection).
+
+This is the desktop version of the web Beam Designer in `index.html`. Use
+`index.html` as the reference for behavior: the desktop app must give the same
+numbers for the same inputs and offer the same tools, adapted to Tkinter as
+described below.
+
+## Platform
+- Python 3.10 or newer, with a Tkinter GUI (`tkinter` and `tkinter.ttk`).
+- Use the Python standard library only, so there is nothing to install. Draw all
+  plots on a Tkinter `Canvas`. Do not use matplotlib, NumPy, or Pillow.
+- Runs on macOS and Windows. Start it with `python beam_app.py` (`python3` on
+  macOS). Note for macOS: the python.org installer includes Tkinter. Homebrew
+  Python needs the `python-tk` package.
+
+## Files
+- `beam_app.py`: the Tkinter window, input widgets, drawing, and event handling.
+  It runs the app when started.
+- `beam_calc.py`: the calculation engine, with no Tkinter imports. It takes the
+  inputs (support, span, loads, section, options) and returns reactions; V, M,
+  and deflection arrays; check results; and the reserve factor. The GUI calls
+  only this module for calculations, so it can be tested without opening a
+  window.
+- `sections.py`: the W-shape and lumber tables below, with source citations in
+  comments.
+- `test_validation.py`: `unittest` tests for the six validation cases. Run them
+  with `python -m unittest`.
+- `index.html`: the web reference app. Do not change it.
 
 ## Assumptions
 - Single span only: simply supported or cantilever (fixed at the left end).
@@ -16,18 +43,21 @@ and stiff enough (deflection).
 - **Units:** inputs are in ft, kips, and kip/ft. Section properties are in inches. The app converts units internally.
 
 ## Inputs
-- **Support type:** simply supported or cantilever.
-- **Span L** (ft).
-- **Point loads:** magnitude P (kips), position x (ft), and a tag of Dead or Live.
-- **Uniform loads:** magnitude w (kip/ft), start and end positions (ft), and a tag of Dead or Live. Partial-length uniform loads are allowed.
+All inputs sit in a panel on the left side of the window.
+
+- **Support type:** radio buttons for simply supported or cantilever.
+- **Span L** (ft): an entry field.
+- **Point loads:** a table (`ttk.Treeview`) with columns P (kips), x (ft), and Dead/Live. Add, Edit, and Remove buttons sit under it. Add and Edit open a small dialog with fields for each value.
+- **Uniform loads:** a second table with columns w (kip/ft), start (ft), end (ft), and Dead/Live, with the same buttons. Partial-length uniform loads are allowed.
 - **Self-weight checkbox:** adds the member's own weight as a dead uniform load over the full span. It is off by default.
 - **Material and section:**
-  - Steel: pick a W-shape from the list below.
-  - Lumber: pick a size from the list below. Set the load duration factor C_D (default 1.0) and the repetitive-member checkbox (C_r).
-- **Input checks:** span must be greater than 0, and loads must lie within the span. Show a clear message when an input is invalid. With no loads, show zero diagrams.
+  - Material: radio buttons for Steel or Lumber.
+  - Section: a read-only combobox listing the sections for the chosen material.
+  - Lumber only: a C_D entry (default 1.0) and a repetitive-member checkbox (C_r). Disable these when Steel is chosen.
+- **Input checks:** span must be greater than 0, and loads must lie within the span. When an input is invalid, outline the bad field in red and show a clear message in the status bar at the bottom of the window. Keep the last valid results on screen, grayed out, until the input is fixed. With no loads, show zero diagrams.
 
 ## Section data
-Store the source data in `01_data/` with citations, and embed a copy in `index.html`. The copy keeps the app working as a single file, including when it is opened directly from disk.
+Store the data in `sections.py`, with the source for each table in a comment.
 
 ### Steel W-shapes (AISC Shapes Database v16.0)
 Fields: d, tw, A, Ix, Sx, Zx, and weight (lb/ft). Verify every value against the AISC database before release.
@@ -65,6 +95,8 @@ Use actual dimensions b × d. Compute A = bd, S = bd²/6, and I = bd³/12.
 C_r = 1.15 applies only to 2x and 4x members, when the repetitive-member checkbox is on. Lumber self-weight uses 35 lb/ft³. Verify the table values against the NDS Supplement before release.
 
 ## Calculations
+All calculations live in `beam_calc.py`.
+
 1. **Reactions** from statics.
 2. **Shear and moment:** step along the beam at 2000 points plus every load location, adding in each point load and uniform load.
 3. **Deflection:** integrate M/EI twice numerically, then apply the boundary conditions:
@@ -82,6 +114,14 @@ C_r = 1.15 applies only to 2x and 4x members, when the repetitive-member checkbo
    - Total-load deflection ≤ L/240.
    - For a cantilever, use 2L in place of L.
 
+## Window layout
+- **Left:** the input panel, scrollable if the window is short.
+- **Center:** four plots stacked on one `Canvas` (or four canvases with the same width and margins): the beam sketch, then shear, moment, and deflection.
+- **Right:** a `ttk.Notebook` with tabs for Summary, Stresses at Probe, Section Comparison, and Validation.
+- **Bottom:** a status bar for input messages and the overall PASS/FAIL result.
+- **Menu bar:** File (Save Report, Save Diagrams, Quit) and Help (About).
+- The window opens at 1280 × 800, can be resized down to 1000 × 680, and the plots redraw to fit when it is resized.
+
 ## Outputs
 - **Beam sketch:** the beam with supports, loads (Dead and Live drawn in different styles), and reaction values.
 - **Diagrams:** shear, moment, and deflection (total), each with its maximum value and that value's x location labeled.
@@ -89,24 +129,25 @@ C_r = 1.15 applies only to 2x and 4x members, when the repetitive-member checkbo
   - the demand
   - the capacity or limit
   - the ratio (demand ÷ capacity)
-  - PASS or FAIL
-- **Deflected shape:** the beam sketch draws the total-load deflected shape over the undeformed beam, scaled so the L/240 (or 2L/240) limit is about 36 px tall by default. The scale can be set to true scale, ×10, ×50, or ×200, and the legend always shows the factor in use. A short dashed line marks the limit at the max-deflection point.
-- **Failure display:** if bending or shear fails, the beam turns red, cracks at the governing location (a vertical crack for bending, a diagonal crack for shear), and the two pieces fall with a short animation and a label giving the failure mode, location, and ratio. A Replay button repeats the animation. A deflection-only failure shows the beam red and sagging (no break), because it is a serviceability limit. With reduced motion set in the OS, the final state is shown without animation.
-- **Live updates:** results update as inputs change.
-- **Print view:** a print-friendly layout for turning in work.
+  - PASS or FAIL, colored green or red
+- **Deflected shape:** the beam sketch draws the total-load deflected shape over the undeformed beam, scaled so the L/240 (or 2L/240) limit is about 36 px tall by default. A combobox sets the scale to auto, true scale, ×10, ×50, or ×200, and the legend always shows the factor in use. A short dashed line marks the limit at the max-deflection point.
+- **Failure display:** if bending or shear fails, the beam turns red, cracks at the governing location (a vertical crack for bending, a diagonal crack for shear), and the two pieces fall with a short animation (driven by `after()` calls) and a label giving the failure mode, location, and ratio. A Replay button repeats the animation. A deflection-only failure shows the beam red and sagging (no break), because it is a serviceability limit. An "Animate failures" checkbox (on by default) turns the animation off and shows the final state instead.
+- **Live updates:** results update as inputs change, using variable traces on the entry fields. Wait about 150 ms after the last keystroke before recalculating, so typing stays smooth.
+- **Save Report:** writes a plain-text report (`.txt`) with the inputs, section properties, reactions, maximum values with locations, and the summary table, for turning in work. Use a save-file dialog.
+- **Save Diagrams:** saves the plot canvas as an Encapsulated PostScript file (`.eps`) with `Canvas.postscript()`.
 
 ## Interactive tools
-- **Probe:** hovering, tapping, or using arrow keys on the sketch or any diagram moves a vertical probe line that stays lined up across all plots (they share the same x-axis margins). Each plot shows its value at the probe (Δ on the sketch, V, M, and Δ total/live on the diagrams). Clicking pins the probe. The probe snaps to load positions and max-value locations. By default it sits at the max-moment location.
+- **Probe:** moving the mouse over the sketch or any diagram moves a vertical probe line that stays lined up across all plots (they share the same x-axis margins). The Left and Right arrow keys also move it when a plot has focus. Each plot shows its value at the probe (Δ on the sketch, V, M, and Δ total/live on the diagrams). Clicking pins the probe, and clicking again unpins it. The probe snaps to load positions and max-value locations. By default it sits at the max-moment location.
 - **Stresses at the probe:** the cross-section (lumber to scale, steel schematic), the linear bending-stress distribution with ±Fb (or ±Fb′) allowable lines, and the shear stress: average web shear V/(d·tw) for steel, parabolic with peak 1.5V/A for lumber. A readout lists x, V, M, fb/Fb, fv/Fv, and live and total Δ.
-- **Drag loads:** point loads and uniform loads can be dragged along the beam in the sketch, and uniform-load end handles stretch them. Positions round to 0.25 ft (0.05 ft for spans of 5 ft or less), and the input fields update to match.
-- **What-if load multiplier:** a 0–3× slider scales the entered loads (not self-weight). The app reports the multiplier at which the first check reaches 1.0. All ratios are linear in the multiplier, so this comes from two runs, at 0× and 1×. Validation cases use 1×.
-- **Section comparison:** every section of the chosen material is checked under the same loads, sorted by weight, and shown with its governing ratio and check. The lightest passing section is tagged. Clicking a row selects that section.
+- **Drag loads:** point loads and uniform loads can be dragged along the beam in the sketch with the mouse, and uniform-load end handles stretch them. Positions round to 0.25 ft (0.05 ft for spans of 5 ft or less), and the load tables update to match.
+- **What-if load multiplier:** a 0–3× `ttk.Scale` slider scales the entered loads (not self-weight). The app reports the multiplier at which the first check reaches 1.0. All ratios are linear in the multiplier, so this comes from two runs, at 0× and 1×. Validation cases use 1×.
+- **Section comparison:** every section of the chosen material is checked under the same loads, sorted by weight, and shown in a table with its governing ratio, governing check, and a ratio bar. The lightest passing section is tagged. Double-clicking a row selects that section.
 
 ## Look and feel
-Clean and professional, and usable on a laptop or tablet. Opens with the W12x26 validation beam already loaded.
+Clean and professional, using the native `ttk` theme for the platform. Readable on a laptop screen. Opens with the W12x26 validation beam (case 1) already loaded.
 
 ## Validation
-All cases must match within 0.5%. Self-weight is off unless stated otherwise. Store the hand calculations in `02_validation/`.
+All cases must match within 0.5%. Self-weight is off unless stated otherwise. Check every case in `test_validation.py`. The Validation tab runs the same cases from inside the app and shows each case's expected value, computed value, difference, and PASS/FAIL. Results must also match `index.html` for the same inputs.
 
 1. **20 ft simply supported W12x26, 1 kip/ft live load over the full span**
    - Reactions: R = 10.0 kips; V_max = 10.0 kips; M = 50.0 kip-ft
@@ -132,4 +173,4 @@ All cases must match within 0.5%. Self-weight is off unless stated otherwise. St
    - Total-load deflection: 0.625 in (≤ L/240 = 1.00 in)
 
 ## Out of scope
-Continuous and multi-span beams, lateral-torsional buckling and other buckling, weak-axis bending, axial loads, load combinations beyond D + L, and sections not in the lists above.
+Continuous and multi-span beams, lateral-torsional buckling and other buckling, weak-axis bending, axial loads, load combinations beyond D + L, and sections not in the lists above. Also out of scope for the desktop version: packaging as a standalone executable, saving and opening project files, printing directly from the app, and dark mode.
