@@ -35,3 +35,7 @@
 - **Asked:** Make a .zip of the beam_desktop folder and give the GitHub repository address for the submission comments.
   **Changed:** Created `beam_desktop.zip` in the class folder (next to `beam_desktop`), leaving out `__pycache__` and `.DS_Store`; it includes the `.git` history. No project files changed except this entry. The repository is https://github.com/Xan-Cannon/beam_desktop.
   **Worked:** Yes. `main` on GitHub matched the local `main` (commit 0aedd94) before this entry, and the repository page is public (HTTP 200). This entry's commit is local only until it is pushed.
+
+- **Asked:** Push the last commit to GitHub, then log that and push again so the zip and GitHub match.
+  **Changed:** Pushed `main` to https://github.com/Xan-Cannon/beam_desktop (0aedd94 → 430972f). Added this entry, committed and pushed it, and rebuilt `beam_desktop.zip` in the class folder so it includes this entry. No project files changed except this entry.
+  **Worked:** Yes. After the final push, the GitHub `main` commit matched the local `main` commit, and the rebuilt zip contains this entry.
