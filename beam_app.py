@@ -242,6 +242,7 @@ class BeamApp:
         fm.add_separator()
         fm.add_command(label="Save Report…", command=self.save_report)
         fm.add_command(label="Save Diagrams…", command=self.save_diagrams)
+        fm.add_command(label="Export Results (CSV)…", command=self.export_csv)
         fm.add_separator()
         fm.add_command(label="Quit", accelerator=f"{accel}+Q", command=self.quit)
         mb.add_cascade(label="File", menu=fm)
@@ -488,6 +489,7 @@ class BeamApp:
         self.lbl_exag.pack(side="left")
         self.var_animate = tk.BooleanVar(value=True)
         ttk.Checkbutton(tb, text="Animate failures", variable=self.var_animate).pack(side="right")
+        ttk.Button(tb, text="Export CSV…", command=self.export_csv).pack(side="right", padx=(0, 10))
         self.btn_replay = ttk.Button(tb, text="Replay", command=self.replay)
         self.btn_replay_shown = False
 
@@ -1890,6 +1892,27 @@ class BeamApp:
         with open(path, "w", encoding="utf-8") as fh:
             fh.write(bc.report_text(self.cfg_used, self.last))
         self.status_msg.config(text=f"Saved report to {path}", foreground="")
+
+    def export_csv(self):
+        if self.pending_update:
+            self.root.after_cancel(self.pending_update)
+            self.update()
+        if self.last is None or self.stale:
+            messagebox.showwarning("Export CSV", "Fix the inputs first, so the table shows current results.",
+                                   parent=self.root)
+            return
+        base = os.path.splitext(os.path.basename(self.file_path))[0] if self.file_path else "beam"
+        path = filedialog.asksaveasfilename(parent=self.root, title="Export Results (CSV)", defaultextension=".csv",
+                                            initialfile=f"{base}_results.csv",
+                                            filetypes=[("CSV (Excel)", "*.csv"), ("All files", "*.*")])
+        if not path:
+            return
+        try:
+            n = bc.write_results_csv(self.last, path)
+        except OSError as e:
+            messagebox.showerror("Export CSV", f"Could not save the file.\n\n{e}", parent=self.root)
+            return
+        self.status_msg.config(text=f"Exported {n} rows to {path}", foreground="")
 
     def save_diagrams(self):
         if self.last is None:

@@ -121,7 +121,8 @@ All calculations live in `beam_calc.py`.
 - **Center:** four plots stacked on one `Canvas` (or four canvases with the same width and margins): the beam sketch, then shear, moment, and deflection.
 - **Right:** a `ttk.Notebook` with tabs for Summary, Stresses at Probe, Section Comparison, and Validation.
 - **Bottom:** a status bar for input messages and the overall PASS/FAIL result.
-- **Menu bar:** File (Open, Save, Save As, Save Report, Save Diagrams, Quit) and Help (About).
+- **Menu bar:** File (Open, Save, Save As, Save Report, Save Diagrams, Export Results (CSV), Quit) and Help (About).
+- **Plot toolbar:** above the plots, the deflected-shape scale, an Export CSV button, the Replay button (only after a strength failure), and the Animate failures checkbox.
 - The window opens at 1280 × 800, can be resized down to 1000 × 680, and the plots redraw to fit when it is resized.
 
 ## Outputs
@@ -137,6 +138,15 @@ All calculations live in `beam_calc.py`.
 - **Live updates:** results update as inputs change, using variable traces on the entry fields. Wait about 150 ms after the last keystroke before recalculating, so typing stays smooth.
 - **Save Report:** writes a plain-text report (`.txt`) with the inputs, section properties, reactions, maximum values with locations, and the summary table, for turning in work. Use a save-file dialog.
 - **Save Diagrams:** saves the plot canvas as an Encapsulated PostScript file (`.eps`) with `Canvas.postscript()`.
+- **Export results (CSV):** the Export CSV button (also File → Export Results (CSV)) saves a table
+  along the beam to a `.csv` file that opens directly in Excel. Columns: `x (ft)`, `V (kips)`,
+  `M (kip-ft)`, and `Deflection (in)` for the total (D + L) load case, with downward deflection
+  positive. There is one row per analysis point (the 2000-step grid plus load locations). At a
+  point load, x appears twice, with the shear just left and just right of the load, so the jump
+  plots correctly. The file is UTF-8 with a byte-order mark so Excel reads it correctly, uses
+  commas, and has one header row and no other text. The what-if multiplier and self-weight are
+  included when they are on, matching the plots. Export is blocked, with a message, while the
+  inputs are invalid.
 
 ## Saving and opening designs
 - **File format:** a design is saved as a `.beam` file, which is plain JSON. It holds the

@@ -126,6 +126,41 @@ class DeflectionLimits(unittest.TestCase):
         self.assertTrue(any(e["field"] == "total_limit" for e in bc.validate_cfg(cfg)))
 
 
+class ResultsCSV(unittest.TestCase):
+    def test_rows_match_engine_and_show_jump(self):
+        cfg = copy.deepcopy(bc.VALIDATION[2]["cfg"])      # 10 k at x = 5 ft
+        res = bc.design(cfg)
+        rows = bc.results_rows(res)
+        at5 = [r for r in rows if r[0] == 5.0]
+        self.assertEqual(len(at5), 2)                     # shear jump: left then right
+        self.assertAlmostEqual(at5[0][1], 7.5)
+        self.assertAlmostEqual(at5[1][1], -2.5)
+        self.assertAlmostEqual(at5[0][2], 37.5)
+        xs = [r[0] for r in rows]
+        self.assertEqual(xs, sorted(xs))
+        self.assertEqual((xs[0], xs[-1]), (0.0, 20.0))
+        dmax = max(rows, key=lambda r: r[3])
+        self.assertAlmostEqual(dmax[3], res.total.dMax)
+
+    def test_csv_file_opens_as_table(self):
+        import csv as _csv
+        import tempfile
+        res = bc.design(bc.default_cfg())
+        with tempfile.TemporaryDirectory() as d:
+            path = f"{d}/out.csv"
+            n = bc.write_results_csv(res, path)
+            with open(path, "rb") as fh:
+                self.assertTrue(fh.read(3) == b"\xef\xbb\xbf")   # BOM for Excel
+            with open(path, encoding="utf-8-sig", newline="") as fh:
+                table = list(_csv.reader(fh))
+        self.assertEqual(table[0], list(bc.CSV_HEADER))
+        self.assertEqual(len(table) - 1, n)
+        self.assertEqual(n, bc.N_STEPS + 1)               # UDL only: no extra points
+        mid = [r for r in table[1:] if r[0] == "10.0000"][0]
+        self.assertAlmostEqual(float(mid[2]), 50.0, places=3)
+        self.assertAlmostEqual(float(mid[3]), 0.609, delta=0.002)
+
+
 class DesignFiles(unittest.TestCase):
     def setUp(self):
         import tempfile

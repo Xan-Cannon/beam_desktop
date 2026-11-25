@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import bisect
 import copy
+import csv
 import json
 import math
 from dataclasses import dataclass, field
@@ -609,6 +610,38 @@ def run_validation() -> list[dict]:
             rows.append({"label": label, "exp": exp, "got": got, "diff": diff, "ok": diff <= VALID_TOL})
         out.append({"name": case["name"], "cfg": case["cfg"], "rows": rows, "ok": all(x["ok"] for x in rows)})
     return out
+
+
+# ---------------------------------------------------------------- results table (CSV)
+
+CSV_HEADER = ("x (ft)", "V (kips)", "M (kip-ft)", "Deflection (in)")
+
+
+def results_rows(res: Result) -> list[tuple]:
+    """(x, V, M, deflection) along the beam for the total load case, downward deflection positive.
+
+    One row per analysis point; at a shear jump x appears twice (V just left, then just right).
+    """
+    t = res.total
+    rows = []
+    i = 0
+    n = len(t.xs)
+    for x, v in t.shear_pts:
+        while i < n - 1 and t.xs[i] < x:
+            i += 1
+        rows.append((x, v, t.M[i], t.D[i]))
+    return rows
+
+
+def write_results_csv(res: Result, path: str) -> int:
+    """Write the results table as an Excel-friendly CSV. Returns the number of data rows."""
+    rows = results_rows(res)
+    with open(path, "w", encoding="utf-8-sig", newline="") as fh:
+        w = csv.writer(fh)
+        w.writerow(CSV_HEADER)
+        for x, v, m, d in rows:
+            w.writerow((fx(x, 4), fx(v, 4), fx(m, 4), fx(d, 5)))
+    return len(rows)
 
 
 # ---------------------------------------------------------------- design files (.beam)
