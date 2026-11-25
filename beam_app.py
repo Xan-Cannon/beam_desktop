@@ -10,6 +10,7 @@ the behavior reference.
 from __future__ import annotations
 
 import copy
+import datetime
 import json
 import math
 import os
@@ -19,6 +20,7 @@ import tkinter.font as tkfont
 from tkinter import filedialog, messagebox, ttk
 
 import beam_calc as bc
+import calc_sheet
 from beam_calc import fx, interp, shear_at
 from sections import LUMBER, W_SHAPES
 
@@ -243,6 +245,7 @@ class BeamApp:
         fm.add_command(label="Save Report…", command=self.save_report)
         fm.add_command(label="Save Diagrams…", command=self.save_diagrams)
         fm.add_command(label="Export Results (CSV)…", command=self.export_csv)
+        fm.add_command(label="Calculation Sheet (PDF)…", command=self.export_pdf)
         fm.add_separator()
         fm.add_command(label="Quit", accelerator=f"{accel}+Q", command=self.quit)
         mb.add_cascade(label="File", menu=fm)
@@ -489,7 +492,8 @@ class BeamApp:
         self.lbl_exag.pack(side="left")
         self.var_animate = tk.BooleanVar(value=True)
         ttk.Checkbutton(tb, text="Animate failures", variable=self.var_animate).pack(side="right")
-        ttk.Button(tb, text="Export CSV…", command=self.export_csv).pack(side="right", padx=(0, 10))
+        ttk.Button(tb, text="Calculation Sheet…", command=self.export_pdf).pack(side="right", padx=(0, 10))
+        ttk.Button(tb, text="Export CSV…", command=self.export_csv).pack(side="right", padx=(0, 6))
         self.btn_replay = ttk.Button(tb, text="Replay", command=self.replay)
         self.btn_replay_shown = False
 
@@ -1913,6 +1917,137 @@ class BeamApp:
             messagebox.showerror("Export CSV", f"Could not save the file.\n\n{e}", parent=self.root)
             return
         self.status_msg.config(text=f"Exported {n} rows to {path}", foreground="")
+
+    # ------------------------------------------------------------ calculation sheet (PDF)
+    PRINT_W = 720          # canvas pixels used for the printed diagrams
+    PRINT_DIAG_H = 120        # diagrams sharing page 1 with the sketch
+    PRINT_DIAG_H_TALL = 190   # diagrams on their own page
+
+    def print_drawings(self):
+        """Draw the sketch and diagrams on an offscreen canvas at print size and collect the shapes."""
+        fonts = ("f_small", "f_norm", "f_bold", "f_head", "f_fail")
+        saved = (self.cv, self.layout, self.plots, self.hits, self.fail_start) + tuple(getattr(self, f) for f in fonts)
+        off = tk.Canvas(self.root, width=self.PRINT_W, height=1200, bg=PALETTE["panel"])
+        try:
+            # Larger fonts for print, so text stays readable after the drawing is scaled to the page.
+            for f in fonts:
+                cur = getattr(self, f)
+                setattr(self, f, tkfont.Font(family=cur.actual("family"), size=round(cur.actual("size") * 1.3),
+                                             weight=cur.actual("weight")))
+            sh = self.sketch_height(self.last)
+            self.cv = off
+            self.layout = {"W": self.PRINT_W, "sketch_h": sh, "diag_h": self.PRINT_DIAG_H}
+            self.plots, self.hits = [], []
+            self.fail_start = -math.inf          # show a failure in its final state
+            self.draw_sketch()
+            sketch = self._crop_top(self._collect(off, "sketch", 0, sh))
+            out = []
+            for h in (self.PRINT_DIAG_H, self.PRINT_DIAG_H_TALL):
+                off.delete("diagram")
+                self.draw_diagrams(sh, h)
+                out.append(self._collect(off, "diagram", sh, 3 * h))
+            note = self.lbl_exag.cget("text")
+        finally:
+            (self.cv, self.layout, self.plots, self.hits, self.fail_start), rest = saved[:5], saved[5:]
+            for f, v in zip(fonts, rest):
+                setattr(self, f, v)
+            off.destroy()
+        return sketch, out[0], out[1], note
+
+    @staticmethod
+    def _crop_top(drawing, pad=8):
+        """Drop the empty band at the top of the sketch (on screen it holds the probe tooltip)."""
+        ys = []
+        for it in drawing["items"]:
+            if it[0] in ("line", "poly"):
+                ys += [y for _, y in it[1]]
+            elif it[0] in ("rect", "oval"):
+                ys += [it[2], it[4]]
+            elif it[0] == "text":
+                ys.append(it[2] - it[4] * 1.2)   # text box top, roughly
+        top = max(0.0, min(ys) - pad) if ys else 0.0
+        if top <= 0:
+            return drawing
+        items = []
+        for it in drawing["items"]:
+            k = it[0]
+            if k in ("line", "poly"):
+                items.append((k, [(x, y - top) for x, y in it[1]]) + it[2:])
+            elif k in ("rect", "oval"):
+                items.append((k, it[1], it[2] - top, it[3], it[4] - top) + it[5:])
+            else:
+                items.append((k, it[1], it[2] - top) + it[3:])
+        return dict(drawing, height=drawing["height"] - top, items=items)
+
+    def _collect(self, cv, tag, y_off, height):
+        scaling = float(self.root.tk.call("tk", "scaling"))
+
+        def color(c):
+            if not c:
+                return None
+            if c.startswith("#") and len(c) == 7:
+                return c
+            r, g, b = self.root.winfo_rgb(c)
+            return "#%02x%02x%02x" % (r // 256, g // 256, b // 256)
+
+        def dash(d):
+            vals = [float(v) for v in str(d).replace(",", " ").split() if v.strip()]
+            return vals or None
+
+        items = []
+        for it in cv.find_withtag(tag):
+            kind = cv.type(it)
+            c = cv.coords(it)
+            pts = [(c[i], c[i + 1] - y_off) for i in range(0, len(c) - 1, 2)]
+            opt = lambda k: cv.itemcget(it, k)
+            if kind == "line":
+                items.append(("line", pts, color(opt("fill")) or "#000000", float(opt("width")), dash(opt("dash"))))
+            elif kind == "polygon":
+                items.append(("poly", pts, color(opt("fill")), color(opt("outline")), float(opt("width")),
+                              dash(opt("dash"))))
+            elif kind in ("rectangle", "oval"):
+                (x0, y0), (x1, y1) = pts[0], pts[1]
+                if kind == "rectangle":
+                    items.append(("rect", x0, y0, x1, y1, color(opt("fill")), color(opt("outline")),
+                                  float(opt("width")), dash(opt("dash"))))
+                else:
+                    items.append(("oval", x0, y0, x1, y1, color(opt("fill")), color(opt("outline")),
+                                  float(opt("width"))))
+            elif kind == "text":
+                font = opt("font")
+                size = int(self.root.tk.call("font", "actual", font, "-size"))
+                size_px = size * scaling if size > 0 else -size
+                bold = self.root.tk.call("font", "actual", font, "-weight") == "bold"
+                items.append(("text", pts[0][0], pts[0][1], opt("text"), size_px, bold,
+                              color(opt("fill")) or "#000000", opt("anchor"), float(opt("angle") or 0)))
+        return {"width": self.PRINT_W, "height": height, "items": items}
+
+    def export_pdf(self):
+        if self.pending_update:
+            self.root.after_cancel(self.pending_update)
+            self.update()
+        if self.last is None or self.stale:
+            messagebox.showwarning("Calculation Sheet", "Fix the inputs first, so the sheet shows current results.",
+                                   parent=self.root)
+            return
+        base = os.path.splitext(os.path.basename(self.file_path))[0] if self.file_path else "beam"
+        path = filedialog.asksaveasfilename(parent=self.root, title="Save Calculation Sheet", defaultextension=".pdf",
+                                            initialfile=f"{base}_calc_sheet.pdf",
+                                            filetypes=[("PDF", "*.pdf"), ("All files", "*.*")])
+        if not path:
+            return
+        sketch, diagrams, diagrams_tall, note = self.print_drawings()
+        meta = {"name": os.path.basename(self.file_path) if self.file_path else "Untitled design",
+                "date": datetime.date.today().isoformat(),
+                "note": f"Deflected shape {note}" if note else ""}
+        try:
+            data = calc_sheet.build_calc_sheet(self.cfg_used, self.last, sketch, diagrams, meta, diagrams_tall)
+            with open(path, "wb") as fh:
+                fh.write(data)
+        except OSError as e:
+            messagebox.showerror("Calculation Sheet", f"Could not save the file.\n\n{e}", parent=self.root)
+            return
+        self.status_msg.config(text=f"Saved calculation sheet to {path}", foreground="")
 
     def save_diagrams(self):
         if self.last is None:

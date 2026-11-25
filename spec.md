@@ -28,8 +28,13 @@ described below.
   window.
 - `sections.py`: the W-shape and lumber tables below, with source citations in
   comments.
-- `test_validation.py`: `unittest` tests for the six validation cases and the
-  design-file format. Run them with `python -m unittest`.
+- `calc_sheet.py`: lays out the calculation sheet PDF (no Tkinter).
+- `pdf_writer.py`: a small PDF writer using only the standard library and the
+  built-in PDF fonts (Helvetica, Helvetica-Bold, Symbol), so nothing is installed
+  or embedded.
+- `test_validation.py`: `unittest` tests for the six validation cases, the
+  design-file format, the CSV export, and the calculation sheet. Run them with
+  `python -m unittest`.
 - `*.beam`: saved designs (see Saving and opening designs).
 - `index.html`: the web reference app. Do not change it.
 
@@ -121,8 +126,8 @@ All calculations live in `beam_calc.py`.
 - **Center:** four plots stacked on one `Canvas` (or four canvases with the same width and margins): the beam sketch, then shear, moment, and deflection.
 - **Right:** a `ttk.Notebook` with tabs for Summary, Stresses at Probe, Section Comparison, and Validation.
 - **Bottom:** a status bar for input messages and the overall PASS/FAIL result.
-- **Menu bar:** File (Open, Save, Save As, Save Report, Save Diagrams, Export Results (CSV), Quit) and Help (About).
-- **Plot toolbar:** above the plots, the deflected-shape scale, an Export CSV button, the Replay button (only after a strength failure), and the Animate failures checkbox.
+- **Menu bar:** File (Open, Save, Save As, Save Report, Save Diagrams, Export Results (CSV), Calculation Sheet (PDF), Quit) and Help (About).
+- **Plot toolbar:** above the plots, the deflected-shape scale, the Export CSV and Calculation Sheet buttons, the Replay button (only after a strength failure), and the Animate failures checkbox.
 - The window opens at 1280 × 800, can be resized down to 1000 × 680, and the plots redraw to fit when it is resized.
 
 ## Outputs
@@ -147,6 +152,24 @@ All calculations live in `beam_calc.py`.
   commas, and has one header row and no other text. The what-if multiplier and self-weight are
   included when they are on, matching the plots. Export is blocked, with a message, while the
   inputs are invalid.
+- **Calculation sheet (PDF):** the Calculation Sheet button (also File → Calculation Sheet (PDF))
+  saves a US Letter PDF ready to hand in with a design:
+  - **Header:** title, date, and the design's file name ("Untitled design" if not saved).
+  - **Inputs, at the top:** support, span, member and material, section properties, lumber
+    factors, allowable stresses, self-weight, deflection limits, the what-if multiplier if it
+    is not 1×, and every load as entered.
+  - **Checks:** a table with demand, capacity, limit formula, ratio, and PASS/FAIL for bending,
+    shear, live deflection, and total deflection; the overall result and governing check;
+    the reactions; and the maximum V, M, and deflections with their locations.
+  - **Diagrams:** the beam sketch (loads, reactions, deflected shape, and the failure display in
+    its final state) and the shear, moment, and deflection diagrams, drawn by the same code as
+    the screen, with the deflected-shape scale noted. No probe line is drawn.
+  - **Footer on every page:** "Designed by", "Checked by", and "Date" lines to sign, page
+    numbers, and the section-data sources.
+  - Everything fits on one page when the diagrams can be drawn at a readable size. Otherwise
+    the sketch stays on page 1 and the shear, moment, and deflection diagrams go, larger, on
+    page 2.
+  - Blocked, with a message, while the inputs are invalid.
 
 ## Saving and opening designs
 - **File format:** a design is saved as a `.beam` file, which is plain JSON. It holds the

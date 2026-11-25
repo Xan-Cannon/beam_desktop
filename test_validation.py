@@ -161,6 +161,56 @@ class ResultsCSV(unittest.TestCase):
         self.assertAlmostEqual(float(mid[3]), 0.609, delta=0.002)
 
 
+class CalcSheet(unittest.TestCase):
+    @staticmethod
+    def drawing(height, w=720):
+        return {"width": w, "height": height, "items": [
+            ("line", [(0, 10), (w, 10)], "#1f5fa8", 2.0, [4.0, 4.0]),
+            ("poly", [(10, 20), (60, 20), (35, 50)], "#e3f3ea", "#1d7a4c", 1.5, None),
+            ("rect", 100, 20, 140, 40, "#ffffff", "#5f6c7b", 1.0, None),
+            ("oval", 150, 20, 160, 30, "#ffffff", "#1b2430", 1.5),
+            ("text", 200, 30, "Δ = 0.609 in ↓ · Ix = 204 in⁴ (a)\\b", 13.0, True, "#1b2430", "s", 0.0),
+            ("text", 16, 60, "V (kips)", 13.0, False, "#5f6c7b", "center", 90.0),
+        ]}
+
+    def build(self, sketch_h, cfg=None):
+        import calc_sheet
+        cfg = cfg or bc.default_cfg()
+        res = bc.design(cfg)
+        return calc_sheet.build_calc_sheet(cfg, res, self.drawing(sketch_h), self.drawing(360),
+                                           {"name": "test.beam", "date": "2026-11-24", "note": "drawn ×10"},
+                                           self.drawing(570))
+
+    def check_pdf(self, data):
+        import re
+        self.assertTrue(data.startswith(b"%PDF-1.4"))
+        self.assertTrue(data.rstrip().endswith(b"%%EOF"))
+        # every xref offset must point at the start of its object
+        xref = int(re.search(rb"startxref\n(\d+)", data).group(1))
+        self.assertTrue(data[xref:].startswith(b"xref"))
+        offsets = [int(m) for m in re.findall(rb"(\d{10}) 00000 n", data)]
+        for i, off in enumerate(offsets, start=1):
+            self.assertTrue(data[off:].startswith(f"{i} 0 obj".encode()), i)
+        return int(re.search(rb"/Count (\d+)", data).group(1))
+
+    def test_one_page_for_a_normal_beam(self):
+        self.assertEqual(self.check_pdf(self.build(220)), 1)
+
+    def test_tall_sketch_moves_diagrams_to_page_two(self):
+        self.assertEqual(self.check_pdf(self.build(900)), 2)
+
+    def test_lumber_cantilever_failure_builds(self):
+        cfg = copy.deepcopy(bc.VALIDATION[4]["cfg"])
+        cfg.update(support="cant", factor=3.0)
+        self.assertGreaterEqual(self.check_pdf(self.build(260, cfg)), 1)
+
+    def test_text_width_uses_helvetica_metrics(self):
+        from pdf_writer import text_width
+        self.assertAlmostEqual(text_width("AA", 10), 2 * 6.67, places=2)
+        self.assertGreater(text_width("W", 10, bold=True), text_width("i", 10, bold=True))
+        self.assertAlmostEqual(text_width("Δ", 10), 6.12, places=2)   # Symbol font
+
+
 class DesignFiles(unittest.TestCase):
     def setUp(self):
         import tempfile
